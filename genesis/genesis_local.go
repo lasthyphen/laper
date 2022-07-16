@@ -6,7 +6,6 @@ package genesis
 import (
 	"time"
 
-	"github.com/lasthyphen/beacongo/utils/constants"
 	"github.com/lasthyphen/beacongo/utils/crypto"
 	"github.com/lasthyphen/beacongo/utils/formatting"
 	"github.com/lasthyphen/beacongo/utils/units"
@@ -20,10 +19,10 @@ import (
 
 const (
 	VMRQKeyStr          = "vmRQiZeXEXYMyJhEiqdC2z5JhuDbxL8ix9UVvjgMu2Er1NepE"
-	VMRQKeyFormattedStr = constants.SecretKeyPrefix + VMRQKeyStr
+	VMRQKeyFormattedStr = crypto.PrivateKeyPrefix + VMRQKeyStr
 
 	EWOQKeyStr          = "ewoqjP7PxY4yr3iLTpLisriqt94hdyDFNgchSxGGztUrTXtNN"
-	EWOQKeyFormattedStr = constants.SecretKeyPrefix + EWOQKeyStr
+	EWOQKeyFormattedStr = crypto.PrivateKeyPrefix + EWOQKeyStr
 )
 
 var (

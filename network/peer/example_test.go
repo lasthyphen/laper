@@ -11,8 +11,8 @@ import (
 
 	"github.com/lasthyphen/beacongo/message"
 	"github.com/lasthyphen/beacongo/snow/networking/router"
-	"github.com/lasthyphen/beacongo/utils"
 	"github.com/lasthyphen/beacongo/utils/constants"
+	"github.com/lasthyphen/beacongo/utils/ips"
 )
 
 func ExampleStartTestPeer() {
@@ -20,7 +20,7 @@ func ExampleStartTestPeer() {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	peerIP := utils.IPDesc{
+	peerIP := ips.IPPort{
 		IP:   net.IPv6loopback,
 		Port: 9651,
 	}

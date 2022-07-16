@@ -17,10 +17,9 @@ import (
 	"github.com/lasthyphen/beacongo/database/manager"
 	"github.com/lasthyphen/beacongo/database/prefixdb"
 	"github.com/lasthyphen/beacongo/ids"
+	"github.com/lasthyphen/beacongo/utils/json"
 	"github.com/lasthyphen/beacongo/utils/logging"
 	"github.com/lasthyphen/beacongo/utils/password"
-
-	jsoncodec "github.com/lasthyphen/beacongo/utils/json"
 )
 
 const (
@@ -122,7 +121,7 @@ func New(log logging.Logger, dbManager manager.Manager) Keystore {
 
 func (ks *keystore) CreateHandler() (http.Handler, error) {
 	newServer := rpc.NewServer()
-	codec := jsoncodec.NewCodec()
+	codec := json.NewCodec()
 	newServer.RegisterCodec(codec, "application/json")
 	newServer.RegisterCodec(codec, "application/json;charset=UTF-8")
 	if err := newServer.RegisterService(&service{ks: ks}, "keystore"); err != nil {

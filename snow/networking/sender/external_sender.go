@@ -11,14 +11,13 @@ import (
 // ExternalSender sends consensus messages to other validators
 // Right now this is implemented in the networking package
 type ExternalSender interface {
-
 	// Send a message to a specific set of nodes
 	Send(
 		msg message.OutboundMessage,
-		nodeIDs ids.ShortSet,
+		nodeIDs ids.NodeIDSet,
 		subnetID ids.ID,
 		validatorOnly bool,
-	) ids.ShortSet
+	) ids.NodeIDSet
 
 	// Send a message to a random group of nodes in a subnet.
 	// Nodes are sampled based on their validator status.
@@ -28,5 +27,6 @@ type ExternalSender interface {
 		validatorOnly bool,
 		numValidatorsToSend int,
 		numNonValidatorsToSend int,
-	) ids.ShortSet
+		numPeersToSend int,
+	) ids.NodeIDSet
 }

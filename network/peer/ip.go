@@ -8,8 +8,8 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 
-	"github.com/lasthyphen/beacongo/utils"
 	"github.com/lasthyphen/beacongo/utils/hashing"
+	"github.com/lasthyphen/beacongo/utils/ips"
 	"github.com/lasthyphen/beacongo/utils/wrappers"
 )
 
@@ -17,7 +17,7 @@ import (
 // ensure that the most updated IP claim is tracked by peers for a given
 // validator.
 type UnsignedIP struct {
-	IP        utils.IPDesc
+	IP        ips.IPPort
 	Timestamp uint64
 }
 

@@ -10,7 +10,7 @@ import (
 	"github.com/lasthyphen/beacongo/ids"
 	"github.com/lasthyphen/beacongo/snow"
 	"github.com/lasthyphen/beacongo/utils/constants"
-	"github.com/lasthyphen/beacongo/utils/formatting"
+	"github.com/lasthyphen/beacongo/utils/formatting/address"
 	"github.com/lasthyphen/beacongo/vms/components/verify"
 )
 
@@ -145,5 +145,5 @@ func formatAddress(ctx *snow.Context, addr ids.ShortID) (string, error) {
 	}
 
 	hrp := constants.GetHRP(ctx.NetworkID)
-	return formatting.FormatAddress(chainIDAlias, hrp, addr.Bytes())
+	return address.Format(chainIDAlias, hrp, addr.Bytes())
 }

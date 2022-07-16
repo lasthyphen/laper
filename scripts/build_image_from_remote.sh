@@ -25,7 +25,7 @@ fi
 echo "Building docker image from branch: $BRANCH at remote: $REMOTE"
 
 export GOPATH="$SRC_DIR/.build_image_gopath"
-WORKPREFIX="$GOPATH/src/github.com/lasthyphen"
+WORKPREFIX="$GOPATH/src/github.com/ava-labs"
 DOCKER="${DOCKER:-docker}"
 keep_existing=0
 while getopts 'k' opt

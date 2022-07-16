@@ -10,10 +10,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
 
-	"github.com/lasthyphen/beacongo/api/proto/gsharedmemoryproto"
 	"github.com/lasthyphen/beacongo/chains/atomic"
 	"github.com/lasthyphen/beacongo/database"
 	"github.com/lasthyphen/beacongo/database/memdb"
@@ -21,6 +21,9 @@ import (
 	"github.com/lasthyphen/beacongo/ids"
 	"github.com/lasthyphen/beacongo/utils/logging"
 	"github.com/lasthyphen/beacongo/utils/units"
+	"github.com/lasthyphen/beacongo/vms/rpcchainvm/grpcutils"
+
+	sharedmemorypb "github.com/lasthyphen/beacongo/proto/pb/sharedmemory"
 )
 
 const (
@@ -57,13 +60,16 @@ func TestInterface(t *testing.T) {
 
 func wrapSharedMemory(t *testing.T, sm atomic.SharedMemory, db database.Database) (atomic.SharedMemory, io.Closer) {
 	listener := bufconn.Listen(bufSize)
-	server := grpc.NewServer()
-	gsharedmemoryproto.RegisterSharedMemoryServer(server, NewServer(sm, db))
-	go func() {
-		if err := server.Serve(listener); err != nil {
-			t.Logf("Server exited with error: %v", err)
-		}
-	}()
+	serverCloser := grpcutils.ServerCloser{}
+
+	serverFunc := func(opts []grpc.ServerOption) *grpc.Server {
+		server := grpcutils.NewDefaultServer(opts)
+		sharedmemorypb.RegisterSharedMemoryServer(server, NewServer(sm, db))
+		serverCloser.Add(server)
+		return server
+	}
+
+	go grpcutils.Serve(listener, serverFunc)
 
 	dialer := grpc.WithContextDialer(
 		func(context.Context, string) (net.Conn, error) {
@@ -71,12 +77,13 @@ func wrapSharedMemory(t *testing.T, sm atomic.SharedMemory, db database.Database
 		},
 	)
 
-	ctx := context.Background()
-	conn, err := grpc.DialContext(ctx, "", dialer, grpc.WithInsecure())
+	dopts := grpcutils.DefaultDialOptions
+	dopts = append(dopts, dialer)
+	conn, err := grpcutils.Dial("", dopts...)
 	if err != nil {
 		t.Fatalf("Failed to dial: %s", err)
 	}
 
-	rpcsm := NewClient(gsharedmemoryproto.NewSharedMemoryClient(conn))
+	rpcsm := NewClient(sharedmemorypb.NewSharedMemoryClient(conn))
 	return rpcsm, conn
 }

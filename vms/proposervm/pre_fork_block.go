@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/lasthyphen/beacongo/database"
-	"github.com/lasthyphen/beacongo/ids"
 	"github.com/lasthyphen/beacongo/snow/choices"
 	"github.com/lasthyphen/beacongo/snow/consensus/snowman"
 	"github.com/lasthyphen/beacongo/vms/proposervm/block"
@@ -20,8 +19,19 @@ type preForkBlock struct {
 	vm *VM
 }
 
-func (b *preForkBlock) Parent() ids.ID {
-	return b.Block.Parent()
+func (b *preForkBlock) Accept() error {
+	if err := b.acceptOuterBlk(); err != nil {
+		return err
+	}
+	return b.acceptInnerBlk()
+}
+
+func (b *preForkBlock) acceptOuterBlk() error {
+	return nil
+}
+
+func (b *preForkBlock) acceptInnerBlk() error {
+	return b.Block.Accept()
 }
 
 func (b *preForkBlock) Verify() error {

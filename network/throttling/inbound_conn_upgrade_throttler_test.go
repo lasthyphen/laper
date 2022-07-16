@@ -8,17 +8,18 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lasthyphen/beacongo/utils"
-	"github.com/lasthyphen/beacongo/utils/logging"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/lasthyphen/beacongo/utils/ips"
+	"github.com/lasthyphen/beacongo/utils/logging"
 )
 
 var (
-	host1     = utils.IPDesc{IP: net.IPv4(1, 2, 3, 4), Port: 9651}
-	host2     = utils.IPDesc{IP: net.IPv4(1, 2, 3, 5), Port: 9653}
-	host3     = utils.IPDesc{IP: net.IPv4(1, 2, 3, 6), Port: 9655}
-	host4     = utils.IPDesc{IP: net.IPv4(1, 2, 3, 7), Port: 9657}
-	localhost = utils.IPDesc{IP: net.IPv4(127, 0, 0, 1), Port: 9657}
+	host1      = ips.IPPort{IP: net.IPv4(1, 2, 3, 4), Port: 9651}
+	host2      = ips.IPPort{IP: net.IPv4(1, 2, 3, 5), Port: 9653}
+	host3      = ips.IPPort{IP: net.IPv4(1, 2, 3, 6), Port: 9655}
+	host4      = ips.IPPort{IP: net.IPv4(1, 2, 3, 7), Port: 9657}
+	loopbackIP = ips.IPPort{IP: net.IPv4(127, 0, 0, 1), Port: 9657}
 )
 
 func TestNoInboundConnUpgradeThrottler(t *testing.T) {
@@ -80,11 +81,11 @@ func TestInboundConnUpgradeThrottler(t *testing.T) {
 	assert.False(throttlerIntf.ShouldUpgrade(host3))
 
 	// Local host should never be rate-limited
-	assert.True(throttlerIntf.ShouldUpgrade(localhost))
-	assert.True(throttlerIntf.ShouldUpgrade(localhost))
-	assert.True(throttlerIntf.ShouldUpgrade(localhost))
-	assert.True(throttlerIntf.ShouldUpgrade(localhost))
-	assert.True(throttlerIntf.ShouldUpgrade(localhost))
+	assert.True(throttlerIntf.ShouldUpgrade(loopbackIP))
+	assert.True(throttlerIntf.ShouldUpgrade(loopbackIP))
+	assert.True(throttlerIntf.ShouldUpgrade(loopbackIP))
+	assert.True(throttlerIntf.ShouldUpgrade(loopbackIP))
+	assert.True(throttlerIntf.ShouldUpgrade(loopbackIP))
 
 	// Make sure [throttler.done] isn't closed
 	throttler := throttlerIntf.(*inboundConnUpgradeThrottler)

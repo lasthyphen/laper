@@ -6,47 +6,35 @@ package rpcchainvm
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"path/filepath"
-
-	"google.golang.org/grpc"
 
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-plugin"
 
 	"github.com/lasthyphen/beacongo/snow"
-	"github.com/lasthyphen/beacongo/utils/math"
+	"github.com/lasthyphen/beacongo/utils/resource"
 	"github.com/lasthyphen/beacongo/utils/subprocess"
+	"github.com/lasthyphen/beacongo/vms"
+	"github.com/lasthyphen/beacongo/vms/rpcchainvm/grpcutils"
 )
 
 var (
 	errWrongVM = errors.New("wrong vm type")
 
-	serverOptions = []grpc.ServerOption{
-		grpc.MaxRecvMsgSize(math.MaxInt),
-		grpc.MaxSendMsgSize(math.MaxInt),
-	}
-	dialOptions = []grpc.DialOption{
-		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt)),
-		grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(math.MaxInt)),
-	}
-
-	_ Factory = &factory{}
+	_ vms.Factory = &factory{}
 )
 
-type Factory interface {
-	// New returns an instance of a virtual machine.
-	New(*snow.Context) (interface{}, error)
-}
-
 type factory struct {
-	path string
+	path           string
+	processTracker resource.ProcessTracker
 }
 
-func NewFactory(path string) Factory {
+func NewFactory(path string, processTracker resource.ProcessTracker) vms.Factory {
 	return &factory{
-		path: path,
+		path:           path,
+		processTracker: processTracker,
 	}
 }
 
@@ -69,7 +57,7 @@ func (f *factory) New(ctx *snow.Context) (interface{}, error) {
 		// We set managed to true so that we can call plugin.CleanupClients on
 		// node shutdown to ensure every plugin subprocess is killed.
 		Managed:         true,
-		GRPCDialOptions: dialOptions,
+		GRPCDialOptions: grpcutils.DefaultDialOptions,
 	}
 	if ctx != nil {
 		log.SetOutput(ctx.Log)
@@ -79,10 +67,10 @@ func (f *factory) New(ctx *snow.Context) (interface{}, error) {
 			Level:  hclog.Info,
 		})
 	} else {
-		log.SetOutput(ioutil.Discard)
-		config.Stderr = ioutil.Discard
+		log.SetOutput(io.Discard)
+		config.Stderr = io.Discard
 		config.Logger = hclog.New(&hclog.LoggerOptions{
-			Output: ioutil.Discard,
+			Output: io.Discard,
 		})
 	}
 	client := plugin.NewClient(config)
@@ -110,7 +98,6 @@ func (f *factory) New(ctx *snow.Context) (interface{}, error) {
 		return nil, pluginErr(errWrongVM)
 	}
 
-	vm.SetProcess(client)
-	vm.ctx = ctx
+	vm.SetProcess(ctx, client, f.processTracker)
 	return vm, nil
 }

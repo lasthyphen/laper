@@ -17,6 +17,7 @@ import (
 	"github.com/lasthyphen/beacongo/vms/components/djtx"
 	"github.com/lasthyphen/beacongo/vms/components/verify"
 	"github.com/lasthyphen/beacongo/vms/platformvm"
+	"github.com/lasthyphen/beacongo/vms/platformvm/stakeable"
 	"github.com/lasthyphen/beacongo/vms/secp256k1fx"
 )
 
@@ -177,7 +178,7 @@ func (s *signer) getSigners(ctx stdcontext.Context, sourceChainID ids.ID, ins []
 		}
 
 		outIntf := utxo.Out
-		if stakeableOut, ok := outIntf.(*platformvm.StakeableLockOut); ok {
+		if stakeableOut, ok := outIntf.(*stakeable.LockOut); ok {
 			outIntf = stakeableOut.TransferableOut
 		}
 

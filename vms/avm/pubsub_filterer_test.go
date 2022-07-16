@@ -7,12 +7,13 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/lasthyphen/beacongo/pubsub"
-	"github.com/lasthyphen/beacongo/vms/components/djtx"
-	"github.com/lasthyphen/beacongo/vms/secp256k1fx"
 	"github.com/stretchr/testify/assert"
 
 	"github.com/lasthyphen/beacongo/ids"
+	"github.com/lasthyphen/beacongo/pubsub"
+	"github.com/lasthyphen/beacongo/vms/avm/txs"
+	"github.com/lasthyphen/beacongo/vms/components/djtx"
+	"github.com/lasthyphen/beacongo/vms/secp256k1fx"
 )
 
 type mockFilter struct {
@@ -27,7 +28,7 @@ func TestFilter(t *testing.T) {
 	assert := assert.New(t)
 
 	addrID := ids.ShortID{1}
-	tx := Tx{UnsignedTx: &BaseTx{BaseTx: djtx.BaseTx{
+	tx := txs.Tx{UnsignedTx: &txs.BaseTx{BaseTx: djtx.BaseTx{
 		Outs: []*djtx.TransferableOutput{
 			{
 				Out: &secp256k1fx.TransferOutput{

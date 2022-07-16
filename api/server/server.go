@@ -8,24 +8,22 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/url"
+	"path"
 	"sync"
 	"time"
 
 	"github.com/NYTimes/gziphandler"
-
-	"github.com/gorilla/handlers"
 
 	"github.com/rs/cors"
 
 	"github.com/lasthyphen/beacongo/ids"
 	"github.com/lasthyphen/beacongo/snow"
 	"github.com/lasthyphen/beacongo/snow/engine/common"
-	"github.com/lasthyphen/beacongo/utils"
 	"github.com/lasthyphen/beacongo/utils/constants"
+	"github.com/lasthyphen/beacongo/utils/ips"
 	"github.com/lasthyphen/beacongo/utils/logging"
 )
 
@@ -40,7 +38,7 @@ var (
 
 type PathAdder interface {
 	// AddRoute registers a route to a handler.
-	AddRoute(handler *common.HTTPHandler, lock *sync.RWMutex, base, endpoint string, loggingWriter io.Writer) error
+	AddRoute(handler *common.HTTPHandler, lock *sync.RWMutex, base, endpoint string) error
 
 	// AddAliases registers aliases to the server
 	AddAliases(endpoint string, aliases ...string) error
@@ -49,7 +47,7 @@ type PathAdder interface {
 type PathAdderWithReadLock interface {
 	// AddRouteWithReadLock registers a route to a handler assuming the http
 	// read lock is currently held.
-	AddRouteWithReadLock(handler *common.HTTPHandler, lock *sync.RWMutex, base, endpoint string, loggingWriter io.Writer) error
+	AddRouteWithReadLock(handler *common.HTTPHandler, lock *sync.RWMutex, base, endpoint string) error
 
 	// AddAliasesWithReadLock registers aliases to the server assuming the http read
 	// lock is currently held.
@@ -67,7 +65,7 @@ type Server interface {
 		port uint16,
 		allowedOrigins []string,
 		shutdownTimeout time.Duration,
-		nodeID ids.ShortID,
+		nodeID ids.NodeID,
 		wrappers ...Wrapper)
 	// Dispatch starts the API server
 	Dispatch() error
@@ -86,7 +84,6 @@ type Server interface {
 		handler *common.HTTPHandler,
 		ctx *snow.ConsensusContext,
 		base, endpoint string,
-		loggingWriter io.Writer,
 	) error
 	// Shutdown this server
 	Shutdown() error
@@ -123,7 +120,7 @@ func (s *server) Initialize(
 	port uint16,
 	allowedOrigins []string,
 	shutdownTimeout time.Duration,
-	nodeID ids.ShortID,
+	nodeID ids.NodeID,
 	wrappers ...Wrapper,
 ) {
 	s.log = log
@@ -143,7 +140,7 @@ func (s *server) Initialize(
 	s.handler = http.HandlerFunc(
 		func(w http.ResponseWriter, r *http.Request) {
 			// Attach this node's ID as a header
-			w.Header().Set("node-id", nodeID.PrefixedString(constants.NodeIDPrefix))
+			w.Header().Set("node-id", nodeID.String())
 			gzipHandler.ServeHTTP(w, r)
 		},
 	)
@@ -160,11 +157,11 @@ func (s *server) Dispatch() error {
 		return err
 	}
 
-	ipDesc, err := utils.ToIPDesc(listener.Addr().String())
+	ipPort, err := ips.ToIPPort(listener.Addr().String())
 	if err != nil {
 		s.log.Info("HTTP API server listening on %q", listenAddress)
 	} else {
-		s.log.Info("HTTP API server listening on \"%s:%d\"", s.listenHost, ipDesc.Port)
+		s.log.Info("HTTP API server listening on \"%s:%d\"", s.listenHost, ipPort.Port)
 	}
 
 	s.srv = &http.Server{Handler: s.handler}
@@ -187,11 +184,11 @@ func (s *server) DispatchTLS(certBytes, keyBytes []byte) error {
 		return err
 	}
 
-	ipDesc, err := utils.ToIPDesc(listener.Addr().String())
+	ipPort, err := ips.ToIPPort(listener.Addr().String())
 	if err != nil {
 		s.log.Info("HTTPS API server listening on %q", listenAddress)
 	} else {
-		s.log.Info("HTTPS API server listening on \"%s:%d\"", s.listenHost, ipDesc.Port)
+		s.log.Info("HTTPS API server listening on \"%s:%d\"", s.listenHost, ipPort.Port)
 	}
 
 	s.srv = &http.Server{Addr: listenAddress, Handler: s.handler}
@@ -217,15 +214,9 @@ func (s *server) registerChain(chainName string, engine common.Engine) {
 		return
 	}
 
-	httpLogger, err := s.factory.MakeChainChild(chainName, "http")
-	if err != nil {
-		s.log.Error("failed to create new http logger: %s", err)
-		return
-	}
-
 	s.log.Verbo("About to add API endpoints for chain with ID %s", ctx.ChainID)
 	// all subroutes to a chain begin with "bc/<the chain's ID>"
-	defaultEndpoint := constants.ChainAliasPrefix + ctx.ChainID.String()
+	defaultEndpoint := path.Join(constants.ChainAliasPrefix, ctx.ChainID.String())
 
 	// Register each endpoint
 	for extension, handler := range handlers {
@@ -236,19 +227,17 @@ func (s *server) registerChain(chainName string, engine common.Engine) {
 			s.log.Error("could not add route to chain's API handler because route is malformed: %s", err)
 			continue
 		}
-		if err := s.AddChainRoute(handler, ctx, defaultEndpoint, extension, httpLogger); err != nil {
+		if err := s.AddChainRoute(handler, ctx, defaultEndpoint, extension); err != nil {
 			s.log.Error("error adding route: %s", err)
 		}
 	}
 }
 
-func (s *server) AddChainRoute(handler *common.HTTPHandler, ctx *snow.ConsensusContext, base, endpoint string, loggingWriter io.Writer) error {
+func (s *server) AddChainRoute(handler *common.HTTPHandler, ctx *snow.ConsensusContext, base, endpoint string) error {
 	url := fmt.Sprintf("%s/%s", baseURL, base)
 	s.log.Info("adding route %s%s", url, endpoint)
-	// Apply logging middleware
-	h := handlers.CombinedLoggingHandler(loggingWriter, handler.Handler)
 	// Apply middleware to grab/release chain's lock before/after calling API method
-	h, err := lockMiddleware(h, handler.LockOptions, &ctx.Lock)
+	h, err := lockMiddleware(handler.Handler, handler.LockOptions, &ctx.Lock)
 	if err != nil {
 		return err
 	}
@@ -257,23 +246,21 @@ func (s *server) AddChainRoute(handler *common.HTTPHandler, ctx *snow.ConsensusC
 	return s.router.AddRouter(url, endpoint, h)
 }
 
-func (s *server) AddRoute(handler *common.HTTPHandler, lock *sync.RWMutex, base, endpoint string, loggingWriter io.Writer) error {
-	return s.addRoute(handler, lock, base, endpoint, loggingWriter)
+func (s *server) AddRoute(handler *common.HTTPHandler, lock *sync.RWMutex, base, endpoint string) error {
+	return s.addRoute(handler, lock, base, endpoint)
 }
 
-func (s *server) AddRouteWithReadLock(handler *common.HTTPHandler, lock *sync.RWMutex, base, endpoint string, loggingWriter io.Writer) error {
+func (s *server) AddRouteWithReadLock(handler *common.HTTPHandler, lock *sync.RWMutex, base, endpoint string) error {
 	s.router.lock.RUnlock()
 	defer s.router.lock.RLock()
-	return s.addRoute(handler, lock, base, endpoint, loggingWriter)
+	return s.addRoute(handler, lock, base, endpoint)
 }
 
-func (s *server) addRoute(handler *common.HTTPHandler, lock *sync.RWMutex, base, endpoint string, loggingWriter io.Writer) error {
+func (s *server) addRoute(handler *common.HTTPHandler, lock *sync.RWMutex, base, endpoint string) error {
 	url := fmt.Sprintf("%s/%s", baseURL, base)
 	s.log.Info("adding route %s%s", url, endpoint)
-	// Apply logging middleware
-	h := handlers.CombinedLoggingHandler(loggingWriter, handler.Handler)
 	// Apply middleware to grab/release chain's lock before/after calling API method
-	h, err := lockMiddleware(h, handler.LockOptions, lock)
+	h, err := lockMiddleware(handler.Handler, handler.LockOptions, lock)
 	if err != nil {
 		return err
 	}
@@ -303,7 +290,7 @@ func lockMiddleware(handler http.Handler, lockOption common.LockOption, lock *sy
 }
 
 // Reject middleware wraps a handler. If the chain that the context describes is
-// not done bootstrapping, writes back an error.
+// not done state-syncing/bootstrapping, writes back an error.
 func rejectMiddleware(handler http.Handler, ctx *snow.ConsensusContext) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { // If chain isn't done bootstrapping, ignore API calls
 		if ctx.GetState() != snow.NormalOp {
@@ -359,8 +346,8 @@ func PathWriterFromWithReadLock(pather PathAdderWithReadLock) PathAdder {
 	}
 }
 
-func (a readPathAdder) AddRoute(handler *common.HTTPHandler, lock *sync.RWMutex, base, endpoint string, loggingWriter io.Writer) error {
-	return a.pather.AddRouteWithReadLock(handler, lock, base, endpoint, loggingWriter)
+func (a readPathAdder) AddRoute(handler *common.HTTPHandler, lock *sync.RWMutex, base, endpoint string) error {
+	return a.pather.AddRouteWithReadLock(handler, lock, base, endpoint)
 }
 
 func (a readPathAdder) AddAliases(endpoint string, aliases ...string) error {

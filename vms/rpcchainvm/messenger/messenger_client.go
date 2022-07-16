@@ -6,22 +6,23 @@ package messenger
 import (
 	"context"
 
-	"github.com/lasthyphen/beacongo/api/proto/messengerproto"
 	"github.com/lasthyphen/beacongo/snow/engine/common"
+
+	messengerpb "github.com/lasthyphen/beacongo/proto/pb/messenger"
 )
 
 // Client is an implementation of a messenger channel that talks over RPC.
 type Client struct {
-	client messengerproto.MessengerClient
+	client messengerpb.MessengerClient
 }
 
 // NewClient returns a client that is connected to a remote channel
-func NewClient(client messengerproto.MessengerClient) *Client {
+func NewClient(client messengerpb.MessengerClient) *Client {
 	return &Client{client: client}
 }
 
 func (c *Client) Notify(msg common.Message) error {
-	_, err := c.client.Notify(context.Background(), &messengerproto.NotifyRequest{
+	_, err := c.client.Notify(context.Background(), &messengerpb.NotifyRequest{
 		Message: uint32(msg),
 	})
 	return err

@@ -4,7 +4,6 @@
 package message
 
 import (
-	"crypto/x509"
 	"math"
 	"net"
 	"testing"
@@ -15,7 +14,8 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/lasthyphen/beacongo/ids"
-	"github.com/lasthyphen/beacongo/utils"
+	"github.com/lasthyphen/beacongo/staking"
+	"github.com/lasthyphen/beacongo/utils/ips"
 	"github.com/lasthyphen/beacongo/utils/units"
 )
 
@@ -93,7 +93,10 @@ func TestCodecPackParseGzip(t *testing.T) {
 	c, err := NewCodecWithMemoryPool("", prometheus.DefaultRegisterer, 2*units.MiB, 10*time.Second)
 	assert.NoError(t, err)
 	id := ids.GenerateTestID()
-	cert := &x509.Certificate{}
+
+	tlsCert, err := staking.NewTLSCert()
+	assert.NoError(t, err)
+	cert := tlsCert.Leaf
 
 	msgs := []inboundMessage{
 		{
@@ -102,7 +105,7 @@ func TestCodecPackParseGzip(t *testing.T) {
 				NetworkID:      uint32(0),
 				NodeID:         uint32(1337),
 				MyTime:         uint64(time.Now().Unix()),
-				IP:             utils.IPDesc{IP: net.IPv4(1, 2, 3, 4)},
+				IP:             ips.IPPort{IP: net.IPv4(1, 2, 3, 4)},
 				VersionStr:     "v1.2.3",
 				VersionTime:    uint64(time.Now().Unix()),
 				SigBytes:       []byte{'y', 'e', 'e', 't'},
@@ -112,11 +115,11 @@ func TestCodecPackParseGzip(t *testing.T) {
 		{
 			op: PeerList,
 			fields: map[Field]interface{}{
-				SignedPeers: []utils.IPCertDesc{
+				Peers: []ips.ClaimedIPPort{
 					{
 						Cert:      cert,
-						IPDesc:    utils.IPDesc{IP: net.IPv4(1, 2, 3, 4)},
-						Time:      uint64(time.Now().Unix()),
+						IPPort:    ips.IPPort{IP: net.IPv4(1, 2, 3, 4)},
+						Timestamp: uint64(time.Now().Unix()),
 						Signature: make([]byte, 65),
 					},
 				},

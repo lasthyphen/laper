@@ -15,13 +15,18 @@ import (
 	"github.com/lasthyphen/beacongo/message"
 	"github.com/lasthyphen/beacongo/network/throttling"
 	"github.com/lasthyphen/beacongo/snow/networking/router"
+	"github.com/lasthyphen/beacongo/snow/networking/tracker"
 	"github.com/lasthyphen/beacongo/snow/validators"
 	"github.com/lasthyphen/beacongo/staking"
-	"github.com/lasthyphen/beacongo/utils"
 	"github.com/lasthyphen/beacongo/utils/constants"
+	"github.com/lasthyphen/beacongo/utils/ips"
 	"github.com/lasthyphen/beacongo/utils/logging"
+	"github.com/lasthyphen/beacongo/utils/math/meter"
+	"github.com/lasthyphen/beacongo/utils/resource"
 	"github.com/lasthyphen/beacongo/version"
 )
+
+const maxMessageToSend = 1024
 
 // StartTestPeer provides a simple interface to create a peer that has finished
 // the p2p handshake.
@@ -39,7 +44,7 @@ import (
 //   peer.
 func StartTestPeer(
 	ctx context.Context,
-	ip utils.IPDesc,
+	ip ips.IPPort,
 	networkID uint32,
 	router router.InboundHandler,
 ) (Peer, error) {
@@ -81,21 +86,30 @@ func StartTestPeer(
 		return nil, err
 	}
 
-	ipDesc := utils.IPDesc{
+	ipPort := ips.IPPort{
 		IP:   net.IPv6zero,
 		Port: 0,
 	}
+	resourceTracker, err := tracker.NewResourceTracker(prometheus.NewRegistry(), resource.NoUsage, meter.ContinuousFactory{}, 10*time.Second)
+	if err != nil {
+		return nil, err
+	}
+
+	pingMessage, err := mc.Ping()
+	if err != nil {
+		return nil, err
+	}
+
 	peer := Start(
 		&Config{
-			Metrics:              metrics,
-			MessageCreator:       mc,
-			Log:                  logging.NoLog{},
-			InboundMsgThrottler:  throttling.NewNoInboundThrottler(),
-			OutboundMsgThrottler: throttling.NewNoOutboundThrottler(),
+			Metrics:             metrics,
+			MessageCreator:      mc,
+			Log:                 logging.NoLog{},
+			InboundMsgThrottler: throttling.NewNoInboundThrottler(),
 			Network: NewTestNetwork(
 				mc,
 				networkID,
-				ipDesc,
+				ipPort,
 				version.CurrentApp,
 				tlsCert.PrivateKey.(crypto.Signer),
 				ids.Set{},
@@ -103,17 +117,24 @@ func StartTestPeer(
 			),
 			Router:               router,
 			VersionCompatibility: version.GetCompatibility(networkID),
-			VersionParser:        version.NewDefaultApplicationParser(),
+			VersionParser:        version.DefaultApplicationParser,
 			MySubnets:            ids.Set{},
 			Beacons:              validators.NewSet(),
 			NetworkID:            networkID,
 			PingFrequency:        constants.DefaultPingFrequency,
 			PongTimeout:          constants.DefaultPingPongTimeout,
 			MaxClockDifference:   time.Minute,
+			ResourceTracker:      resourceTracker,
+			PingMessage:          pingMessage,
 		},
 		conn,
 		cert,
 		peerID,
+		NewBlockingMessageQueue(
+			metrics,
+			logging.NoLog{},
+			maxMessageToSend,
+		),
 	)
 	return peer, peer.AwaitReady(ctx)
 }

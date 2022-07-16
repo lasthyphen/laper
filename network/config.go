@@ -11,9 +11,10 @@ import (
 	"github.com/lasthyphen/beacongo/ids"
 	"github.com/lasthyphen/beacongo/network/dialer"
 	"github.com/lasthyphen/beacongo/network/throttling"
+	"github.com/lasthyphen/beacongo/snow/networking/tracker"
 	"github.com/lasthyphen/beacongo/snow/uptime"
 	"github.com/lasthyphen/beacongo/snow/validators"
-	"github.com/lasthyphen/beacongo/utils"
+	"github.com/lasthyphen/beacongo/utils/ips"
 )
 
 // HealthConfig describes parameters for network layer health checks.
@@ -59,6 +60,10 @@ type PeerListGossipConfig struct {
 	// the IPs to in every IP gossip event.
 	PeerListNonValidatorGossipSize uint32 `json:"peerListNonValidatorGossipSize"`
 
+	// PeerListPeersGossipSize is the number of peers to gossip
+	// the IPs to in every IP gossip event.
+	PeerListPeersGossipSize uint32 `json:"peerListPeersGossipSize"`
+
 	// PeerListGossipFreq is the frequency that this node will attempt to gossip
 	// signed IPs to its peers.
 	PeerListGossipFreq time.Duration `json:"peerListGossipFreq"`
@@ -102,13 +107,13 @@ type Config struct {
 	DialerConfig dialer.Config `json:"dialerConfig"`
 	TLSConfig    *tls.Config   `json:"-"`
 
-	Namespace          string              `json:"namespace"`
-	MyNodeID           ids.ShortID         `json:"myNodeID"`
-	MyIP               utils.DynamicIPDesc `json:"myIP"`
-	NetworkID          uint32              `json:"networkID"`
-	MaxClockDifference time.Duration       `json:"maxClockDifference"`
-	PingFrequency      time.Duration       `json:"pingFrequency"`
-	AllowPrivateIPs    bool                `json:"allowPrivateIPs"`
+	Namespace          string            `json:"namespace"`
+	MyNodeID           ids.NodeID        `json:"myNodeID"`
+	MyIPPort           ips.DynamicIPPort `json:"myIP"`
+	NetworkID          uint32            `json:"networkID"`
+	MaxClockDifference time.Duration     `json:"maxClockDifference"`
+	PingFrequency      time.Duration     `json:"pingFrequency"`
+	AllowPrivateIPs    bool              `json:"allowPrivateIPs"`
 
 	// CompressionEnabled will compress available outbound messages when set to
 	// true.
@@ -152,4 +157,15 @@ type Config struct {
 	// Size, in bytes, of the buffer that we write peer messages into
 	// (there is one buffer per peer)
 	PeerWriteBufferSize int `json:"peerWriteBufferSize"`
+
+	// Tracks the CPU/disk usage caused by processing messages of each peer.
+	ResourceTracker tracker.ResourceTracker `json:"-"`
+
+	// Specifies how much CPU usage each peer can cause before
+	// we rate-limit them.
+	CPUTargeter tracker.Targeter `json:"-"`
+
+	// Specifies how much disk usage each peer can cause before
+	// we rate-limit them.
+	DiskTargeter tracker.Targeter `json:"-"`
 }

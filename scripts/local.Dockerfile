@@ -10,11 +10,11 @@
 # Dockerfile
 # README.md
 # go.mod
-FROM golang:1.17.4-buster
+FROM golang:1.17.9-buster
 
-RUN mkdir -p /go/src/github.com/lasthyphen
+RUN mkdir -p /go/src/github.com/ava-labs
 
-WORKDIR $GOPATH/src/github.com/lasthyphen
+WORKDIR $GOPATH/src/github.com/ava-labs
 COPY avalanchego avalanchego
 COPY coreth coreth
 
@@ -22,4 +22,4 @@ WORKDIR $GOPATH/src/github.com/lasthyphen/beacongo
 RUN ./scripts/build_avalanche.sh
 RUN ./scripts/build_coreth.sh ../coreth $PWD/build/plugins/evm
 
-RUN ln -sv $GOPATH/src/github.com/lasthyphen/avalanche-byzantine/ /avalanchego
+RUN ln -sv $GOPATH/src/github.com/ava-labs/avalanche-byzantine/ /avalanchego

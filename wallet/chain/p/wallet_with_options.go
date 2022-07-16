@@ -9,6 +9,8 @@ import (
 	"github.com/lasthyphen/beacongo/vms/platformvm"
 	"github.com/lasthyphen/beacongo/vms/secp256k1fx"
 	"github.com/lasthyphen/beacongo/wallet/subnet/primary/common"
+
+	pChainValidator "github.com/lasthyphen/beacongo/vms/platformvm/validator"
 )
 
 var _ Wallet = &walletWithOptions{}
@@ -46,7 +48,7 @@ func (w *walletWithOptions) IssueBaseTx(
 }
 
 func (w *walletWithOptions) IssueAddValidatorTx(
-	validator *platformvm.Validator,
+	validator *pChainValidator.Validator,
 	rewardsOwner *secp256k1fx.OutputOwners,
 	shares uint32,
 	options ...common.Option,
@@ -60,7 +62,7 @@ func (w *walletWithOptions) IssueAddValidatorTx(
 }
 
 func (w *walletWithOptions) IssueAddSubnetValidatorTx(
-	validator *platformvm.SubnetValidator,
+	validator *pChainValidator.SubnetValidator,
 	options ...common.Option,
 ) (ids.ID, error) {
 	return w.Wallet.IssueAddSubnetValidatorTx(
@@ -70,7 +72,7 @@ func (w *walletWithOptions) IssueAddSubnetValidatorTx(
 }
 
 func (w *walletWithOptions) IssueAddDelegatorTx(
-	validator *platformvm.Validator,
+	validator *pChainValidator.Validator,
 	rewardsOwner *secp256k1fx.OutputOwners,
 	options ...common.Option,
 ) (ids.ID, error) {

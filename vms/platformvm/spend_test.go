@@ -10,6 +10,7 @@ import (
 	"github.com/lasthyphen/beacongo/ids"
 	"github.com/lasthyphen/beacongo/vms/components/djtx"
 	"github.com/lasthyphen/beacongo/vms/components/verify"
+	"github.com/lasthyphen/beacongo/vms/platformvm/stakeable"
 	"github.com/lasthyphen/beacongo/vms/secp256k1fx"
 )
 
@@ -188,7 +189,7 @@ func TestSemanticVerifySpendUTXOs(t *testing.T) {
 			description: "locked one input, no outputs, no fee",
 			utxos: []*djtx.UTXO{{
 				Asset: djtx.Asset{ID: vm.ctx.DJTXAssetID},
-				Out: &StakeableLockOut{
+				Out: &stakeable.LockOut{
 					Locktime: uint64(now.Unix()) + 1,
 					TransferableOut: &secp256k1fx.TransferOutput{
 						Amt: 1,
@@ -197,7 +198,7 @@ func TestSemanticVerifySpendUTXOs(t *testing.T) {
 			}},
 			ins: []*djtx.TransferableInput{{
 				Asset: djtx.Asset{ID: vm.ctx.DJTXAssetID},
-				In: &StakeableLockIn{
+				In: &stakeable.LockIn{
 					Locktime: uint64(now.Unix()) + 1,
 					TransferableIn: &secp256k1fx.TransferInput{
 						Amt: 1,
@@ -216,7 +217,7 @@ func TestSemanticVerifySpendUTXOs(t *testing.T) {
 			description: "locked one input, no outputs, positive fee",
 			utxos: []*djtx.UTXO{{
 				Asset: djtx.Asset{ID: vm.ctx.DJTXAssetID},
-				Out: &StakeableLockOut{
+				Out: &stakeable.LockOut{
 					Locktime: uint64(now.Unix()) + 1,
 					TransferableOut: &secp256k1fx.TransferOutput{
 						Amt: 1,
@@ -225,7 +226,7 @@ func TestSemanticVerifySpendUTXOs(t *testing.T) {
 			}},
 			ins: []*djtx.TransferableInput{{
 				Asset: djtx.Asset{ID: vm.ctx.DJTXAssetID},
-				In: &StakeableLockIn{
+				In: &stakeable.LockIn{
 					Locktime: uint64(now.Unix()) + 1,
 					TransferableIn: &secp256k1fx.TransferInput{
 						Amt: 1,
@@ -245,7 +246,7 @@ func TestSemanticVerifySpendUTXOs(t *testing.T) {
 			utxos: []*djtx.UTXO{
 				{
 					Asset: djtx.Asset{ID: vm.ctx.DJTXAssetID},
-					Out: &StakeableLockOut{
+					Out: &stakeable.LockOut{
 						Locktime: uint64(now.Unix()) + 1,
 						TransferableOut: &secp256k1fx.TransferOutput{
 							Amt: 1,
@@ -262,7 +263,7 @@ func TestSemanticVerifySpendUTXOs(t *testing.T) {
 			ins: []*djtx.TransferableInput{
 				{
 					Asset: djtx.Asset{ID: vm.ctx.DJTXAssetID},
-					In: &StakeableLockIn{
+					In: &stakeable.LockIn{
 						Locktime: uint64(now.Unix()) + 1,
 						TransferableIn: &secp256k1fx.TransferInput{
 							Amt: 1,
@@ -279,7 +280,7 @@ func TestSemanticVerifySpendUTXOs(t *testing.T) {
 			outs: []*djtx.TransferableOutput{
 				{
 					Asset: djtx.Asset{ID: vm.ctx.DJTXAssetID},
-					Out: &StakeableLockOut{
+					Out: &stakeable.LockOut{
 						Locktime: uint64(now.Unix()) + 1,
 						TransferableOut: &secp256k1fx.TransferOutput{
 							Amt: 1,
@@ -300,7 +301,7 @@ func TestSemanticVerifySpendUTXOs(t *testing.T) {
 			utxos: []*djtx.UTXO{
 				{
 					Asset: djtx.Asset{ID: vm.ctx.DJTXAssetID},
-					Out: &StakeableLockOut{
+					Out: &stakeable.LockOut{
 						Locktime: uint64(now.Unix()) + 1,
 						TransferableOut: &secp256k1fx.TransferOutput{
 							Amt: 1,
@@ -317,7 +318,7 @@ func TestSemanticVerifySpendUTXOs(t *testing.T) {
 			ins: []*djtx.TransferableInput{
 				{
 					Asset: djtx.Asset{ID: vm.ctx.DJTXAssetID},
-					In: &StakeableLockIn{
+					In: &stakeable.LockIn{
 						Locktime: uint64(now.Unix()) + 1,
 						TransferableIn: &secp256k1fx.TransferInput{
 							Amt: 1,
@@ -334,7 +335,7 @@ func TestSemanticVerifySpendUTXOs(t *testing.T) {
 			outs: []*djtx.TransferableOutput{
 				{
 					Asset: djtx.Asset{ID: vm.ctx.DJTXAssetID},
-					Out: &StakeableLockOut{
+					Out: &stakeable.LockOut{
 						Locktime: uint64(now.Unix()) + 1,
 						TransferableOut: &secp256k1fx.TransferOutput{
 							Amt: 2,
@@ -355,7 +356,7 @@ func TestSemanticVerifySpendUTXOs(t *testing.T) {
 			utxos: []*djtx.UTXO{
 				{
 					Asset: djtx.Asset{ID: vm.ctx.DJTXAssetID},
-					Out: &StakeableLockOut{
+					Out: &stakeable.LockOut{
 						Locktime: uint64(now.Unix()) - 1,
 						TransferableOut: &secp256k1fx.TransferOutput{
 							Amt: 1,

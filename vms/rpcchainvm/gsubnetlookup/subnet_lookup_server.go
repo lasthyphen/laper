@@ -6,16 +6,17 @@ package gsubnetlookup
 import (
 	"context"
 
-	"github.com/lasthyphen/beacongo/api/proto/gsubnetlookupproto"
 	"github.com/lasthyphen/beacongo/ids"
 	"github.com/lasthyphen/beacongo/snow"
+
+	subnetlookuppb "github.com/lasthyphen/beacongo/proto/pb/subnetlookup"
 )
 
-var _ gsubnetlookupproto.SubnetLookupServer = &Server{}
+var _ subnetlookuppb.SubnetLookupServer = &Server{}
 
 // Server is a subnet lookup that is managed over RPC.
 type Server struct {
-	gsubnetlookupproto.UnimplementedSubnetLookupServer
+	subnetlookuppb.UnsafeSubnetLookupServer
 	aliaser snow.SubnetLookup
 }
 
@@ -26,8 +27,8 @@ func NewServer(aliaser snow.SubnetLookup) *Server {
 
 func (s *Server) SubnetID(
 	_ context.Context,
-	req *gsubnetlookupproto.SubnetIDRequest,
-) (*gsubnetlookupproto.SubnetIDResponse, error) {
+	req *subnetlookuppb.SubnetIDRequest,
+) (*subnetlookuppb.SubnetIDResponse, error) {
 	chainID, err := ids.ToID(req.ChainId)
 	if err != nil {
 		return nil, err
@@ -36,7 +37,7 @@ func (s *Server) SubnetID(
 	if err != nil {
 		return nil, err
 	}
-	return &gsubnetlookupproto.SubnetIDResponse{
+	return &subnetlookuppb.SubnetIDResponse{
 		Id: id[:],
 	}, nil
 }

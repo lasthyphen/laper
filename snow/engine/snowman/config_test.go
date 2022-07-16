@@ -4,43 +4,30 @@
 package snowman
 
 import (
-	"github.com/prometheus/client_golang/prometheus"
-
-	"github.com/lasthyphen/beacongo/database/memdb"
 	"github.com/lasthyphen/beacongo/snow/consensus/snowball"
 	"github.com/lasthyphen/beacongo/snow/consensus/snowman"
 	"github.com/lasthyphen/beacongo/snow/engine/common"
-	"github.com/lasthyphen/beacongo/snow/engine/common/queue"
 	"github.com/lasthyphen/beacongo/snow/engine/snowman/block"
-	"github.com/lasthyphen/beacongo/snow/engine/snowman/bootstrap"
 )
 
-func DefaultConfigs() (bootstrap.Config, Config) {
-	blocked, _ := queue.NewWithMissing(memdb.New(), "", prometheus.NewRegistry())
-
-	bootstrapConfig := bootstrap.Config{
-		Config:  common.DefaultConfigTest(),
-		Blocked: blocked,
-		VM:      &block.TestVM{},
-	}
-
-	engineConfig := Config{
-		Ctx:        bootstrapConfig.Ctx,
-		VM:         bootstrapConfig.VM,
-		Sender:     bootstrapConfig.Sender,
-		Validators: bootstrapConfig.Validators,
+func DefaultConfigs() Config {
+	commonCfg := common.DefaultConfigTest()
+	return Config{
+		Ctx:        commonCfg.Ctx,
+		Sender:     commonCfg.Sender,
+		Validators: commonCfg.Validators,
+		VM:         &block.TestVM{},
 		Params: snowball.Parameters{
-			K:                     1,
-			Alpha:                 1,
-			BetaVirtuous:          1,
-			BetaRogue:             2,
-			ConcurrentRepolls:     1,
-			OptimalProcessing:     100,
-			MaxOutstandingItems:   1,
-			MaxItemProcessingTime: 1,
+			K:                       1,
+			Alpha:                   1,
+			BetaVirtuous:            1,
+			BetaRogue:               2,
+			ConcurrentRepolls:       1,
+			OptimalProcessing:       100,
+			MaxOutstandingItems:     1,
+			MaxItemProcessingTime:   1,
+			MixedQueryNumPushNonVdr: 1,
 		},
 		Consensus: &snowman.Topological{},
 	}
-
-	return bootstrapConfig, engineConfig
 }

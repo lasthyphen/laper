@@ -6,16 +6,17 @@ package avm
 import (
 	"github.com/lasthyphen/beacongo/api"
 	"github.com/lasthyphen/beacongo/pubsub"
+	"github.com/lasthyphen/beacongo/vms/avm/txs"
 	"github.com/lasthyphen/beacongo/vms/components/djtx"
 )
 
 var _ pubsub.Filterer = &filterer{}
 
 type filterer struct {
-	tx *Tx
+	tx *txs.Tx
 }
 
-func NewPubSubFilterer(tx *Tx) pubsub.Filterer {
+func NewPubSubFilterer(tx *txs.Tx) pubsub.Filterer {
 	return &filterer{tx: tx}
 }
 

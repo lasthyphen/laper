@@ -6,15 +6,16 @@ package galiasreader
 import (
 	"context"
 
-	"github.com/lasthyphen/beacongo/api/proto/galiasreaderproto"
 	"github.com/lasthyphen/beacongo/ids"
+
+	aliasreaderpb "github.com/lasthyphen/beacongo/proto/pb/aliasreader"
 )
 
-var _ galiasreaderproto.AliasReaderServer = &Server{}
+var _ aliasreaderpb.AliasReaderServer = &Server{}
 
 // Server enables alias lookups over RPC.
 type Server struct {
-	galiasreaderproto.UnimplementedAliasReaderServer
+	aliasreaderpb.UnsafeAliasReaderServer
 	aliaser ids.AliaserReader
 }
 
@@ -25,41 +26,41 @@ func NewServer(aliaser ids.AliaserReader) *Server {
 
 func (s *Server) Lookup(
 	_ context.Context,
-	req *galiasreaderproto.Alias,
-) (*galiasreaderproto.ID, error) {
+	req *aliasreaderpb.Alias,
+) (*aliasreaderpb.ID, error) {
 	id, err := s.aliaser.Lookup(req.Alias)
 	if err != nil {
 		return nil, err
 	}
-	return &galiasreaderproto.ID{
+	return &aliasreaderpb.ID{
 		Id: id[:],
 	}, nil
 }
 
 func (s *Server) PrimaryAlias(
 	_ context.Context,
-	req *galiasreaderproto.ID,
-) (*galiasreaderproto.Alias, error) {
+	req *aliasreaderpb.ID,
+) (*aliasreaderpb.Alias, error) {
 	id, err := ids.ToID(req.Id)
 	if err != nil {
 		return nil, err
 	}
 	alias, err := s.aliaser.PrimaryAlias(id)
-	return &galiasreaderproto.Alias{
+	return &aliasreaderpb.Alias{
 		Alias: alias,
 	}, err
 }
 
 func (s *Server) Aliases(
 	_ context.Context,
-	req *galiasreaderproto.ID,
-) (*galiasreaderproto.AliasList, error) {
+	req *aliasreaderpb.ID,
+) (*aliasreaderpb.AliasList, error) {
 	id, err := ids.ToID(req.Id)
 	if err != nil {
 		return nil, err
 	}
 	aliases, err := s.aliaser.Aliases(id)
-	return &galiasreaderproto.AliasList{
+	return &aliasreaderpb.AliasList{
 		Aliases: aliases,
 	}, err
 }

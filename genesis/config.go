@@ -8,12 +8,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 
 	"github.com/lasthyphen/beacongo/ids"
 	"github.com/lasthyphen/beacongo/utils/constants"
-	"github.com/lasthyphen/beacongo/utils/formatting"
+	"github.com/lasthyphen/beacongo/utils/formatting/address"
 	"github.com/lasthyphen/beacongo/utils/wrappers"
 
 	safemath "github.com/lasthyphen/beacongo/utils/math"
@@ -37,7 +37,7 @@ func (a Allocation) Unparse(networkID uint32) (UnparsedAllocation, error) {
 		UnlockSchedule: a.UnlockSchedule,
 		ETHAddr:        "0x" + hex.EncodeToString(a.ETHAddr.Bytes()),
 	}
-	djtxAddr, err := formatting.FormatAddress(
+	djtxAddr, err := address.Format(
 		"X",
 		constants.GetHRP(networkID),
 		a.DJTXAddr.Bytes(),
@@ -47,19 +47,19 @@ func (a Allocation) Unparse(networkID uint32) (UnparsedAllocation, error) {
 }
 
 type Staker struct {
-	NodeID        ids.ShortID `json:"nodeID"`
+	NodeID        ids.NodeID  `json:"nodeID"`
 	RewardAddress ids.ShortID `json:"rewardAddress"`
 	DelegationFee uint32      `json:"delegationFee"`
 }
 
 func (s Staker) Unparse(networkID uint32) (UnparsedStaker, error) {
-	djtxAddr, err := formatting.FormatAddress(
+	djtxAddr, err := address.Format(
 		"X",
 		constants.GetHRP(networkID),
 		s.RewardAddress.Bytes(),
 	)
 	return UnparsedStaker{
-		NodeID:        s.NodeID.PrefixedString(constants.NodeIDPrefix),
+		NodeID:        s.NodeID,
 		RewardAddress: djtxAddr,
 		DelegationFee: s.DelegationFee,
 	}, err
@@ -102,7 +102,7 @@ func (c Config) Unparse() (UnparsedConfig, error) {
 		uc.Allocations[i] = ua
 	}
 	for i, isa := range c.InitialStakedFunds {
-		djtxAddr, err := formatting.FormatAddress(
+		djtxAddr, err := address.Format(
 			"X",
 			constants.GetHRP(uc.NetworkID),
 			isa.Bytes(),
@@ -204,7 +204,7 @@ func GetConfig(networkID uint32) *Config {
 
 // GetConfigFile loads a *Config from a provided filepath.
 func GetConfigFile(fp string) (*Config, error) {
-	bytes, err := ioutil.ReadFile(filepath.Clean(fp))
+	bytes, err := os.ReadFile(filepath.Clean(fp))
 	if err != nil {
 		return nil, fmt.Errorf("unable to load file %s: %w", fp, err)
 	}

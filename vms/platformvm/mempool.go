@@ -16,7 +16,7 @@ import (
 
 const (
 	// droppedTxIDsCacheSize is the maximum number of dropped txIDs to cache
-	droppedTxIDsCacheSize = 50
+	droppedTxIDsCacheSize = 64
 
 	initialConsumedUTXOsSize = 512
 
@@ -47,11 +47,15 @@ type Mempool interface {
 	RemoveDecisionTxs(txs []*Tx)
 	RemoveProposalTx(tx *Tx)
 
-	PopDecisionTxs(numTxs int) []*Tx
+	PopDecisionTxs(maxTxsBytes int) []*Tx
 	PopProposalTx() *Tx
 
-	MarkDropped(txID ids.ID)
-	WasDropped(txID ids.ID) bool
+	// Note: dropped txs are added to droppedTxIDs but not
+	// not evicted from unissued decision/proposal txs.
+	// This allows previously dropped txs to be possibly
+	// reissued.
+	MarkDropped(txID ids.ID, reason string)
+	GetDropReason(txID ids.ID) (string, bool)
 }
 
 // Transactions from clients that have not yet been put into blocks and added to
@@ -64,6 +68,8 @@ type mempool struct {
 	unissuedProposalTxs TxHeap
 	unknownTxs          prometheus.Counter
 
+	// Key: Tx ID
+	// Value: String repr. of the verification error
 	droppedTxIDs *cache.LRU
 
 	consumedUTXOs ids.Set
@@ -146,7 +152,7 @@ func (m *mempool) Add(tx *Tx) error {
 	// Mark these UTXOs as consumed in the mempool
 	m.consumedUTXOs.Union(inputs)
 
-	// ensure that a mempool tx is either dropped or available (not both)
+	// An explicitly added tx must not be marked as dropped.
 	m.droppedTxIDs.Evict(txID)
 	return nil
 }
@@ -192,16 +198,19 @@ func (m *mempool) RemoveProposalTx(tx *Tx) {
 	}
 }
 
-func (m *mempool) PopDecisionTxs(numTxs int) []*Tx {
-	if maxLen := m.unissuedDecisionTxs.Len(); numTxs > maxLen {
-		numTxs = maxLen
-	}
+func (m *mempool) PopDecisionTxs(maxTxsBytes int) []*Tx {
+	var txs []*Tx
+	for m.unissuedDecisionTxs.Len() > 0 {
+		tx := m.unissuedDecisionTxs.Peek()
+		txBytes := tx.Bytes()
+		if len(txBytes) > maxTxsBytes {
+			return txs
+		}
+		maxTxsBytes -= len(txBytes)
 
-	txs := make([]*Tx, numTxs)
-	for i := range txs {
-		tx := m.unissuedDecisionTxs.RemoveTop()
+		m.unissuedDecisionTxs.RemoveTop()
 		m.deregister(tx)
-		txs[i] = tx
+		txs = append(txs, tx)
 	}
 	return txs
 }
@@ -212,13 +221,16 @@ func (m *mempool) PopProposalTx() *Tx {
 	return tx
 }
 
-func (m *mempool) MarkDropped(txID ids.ID) {
-	m.droppedTxIDs.Put(txID, struct{}{})
+func (m *mempool) MarkDropped(txID ids.ID, reason string) {
+	m.droppedTxIDs.Put(txID, reason)
 }
 
-func (m *mempool) WasDropped(txID ids.ID) bool {
-	_, exist := m.droppedTxIDs.Get(txID)
-	return exist
+func (m *mempool) GetDropReason(txID ids.ID) (string, bool) {
+	reason, exist := m.droppedTxIDs.Get(txID)
+	if !exist {
+		return "", false
+	}
+	return reason.(string), true
 }
 
 func (m *mempool) register(tx *Tx) {

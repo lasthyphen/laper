@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io/fs"
 	"testing"
+	"time"
 
 	"gotest.tools/assert"
 
@@ -14,6 +15,7 @@ import (
 
 	"github.com/lasthyphen/beacongo/ids"
 	"github.com/lasthyphen/beacongo/utils/filesystem"
+	"github.com/lasthyphen/beacongo/utils/resource"
 	"github.com/lasthyphen/beacongo/vms"
 )
 
@@ -43,16 +45,16 @@ var (
 	}
 
 	// read dir results
-	oneValidVM = []fs.FileInfo{
+	oneValidVM = []fs.DirEntry{
 		directory,
 		registeredVM,
 	}
-	twoValidVMs = []fs.FileInfo{
+	twoValidVMs = []fs.DirEntry{
 		directory,
 		registeredVM,
 		unregisteredVM,
 	}
-	invalidVMs = []fs.FileInfo{
+	invalidVMs = []fs.DirEntry{
 		directory,
 		invalidVM,
 	}
@@ -145,6 +147,7 @@ func initVMGetterTest(t *testing.T) *vmGetterTestResources {
 			FileReader:      mockReader,
 			Manager:         mockManager,
 			PluginDirectory: pluginDir,
+			CPUTracker:      resource.NewManager("", time.Hour, time.Hour, time.Hour),
 		},
 	)
 

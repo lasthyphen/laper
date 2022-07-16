@@ -6,12 +6,18 @@ package rpcchainvm
 import (
 	"bytes"
 	"context"
-	j "encoding/json"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"reflect"
+	"sort"
 	"testing"
+
+	stdjson "encoding/json"
+
+	"github.com/golang/mock/gomock"
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
@@ -26,14 +32,54 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/lasthyphen/beacongo/api/proto/ghttpproto"
-	"github.com/lasthyphen/beacongo/api/proto/vmproto"
 	"github.com/lasthyphen/beacongo/snow/engine/common"
+	"github.com/lasthyphen/beacongo/utils/json"
 	"github.com/lasthyphen/beacongo/vms/rpcchainvm/ghttp"
 	"github.com/lasthyphen/beacongo/vms/rpcchainvm/grpcutils"
 
-	cjson "github.com/lasthyphen/beacongo/utils/json"
+	httppb "github.com/lasthyphen/beacongo/proto/pb/http"
+	vmpb "github.com/lasthyphen/beacongo/proto/pb/vm"
 )
+
+var (
+	_ plugin.Plugin     = &testVMPlugin{}
+	_ plugin.GRPCPlugin = &testVMPlugin{}
+)
+
+// Test_VMServerInterface ensures that the RPCs methods defined by VMServer
+// interface are implemented.
+func Test_VMServerInterface(t *testing.T) {
+	var wantMethods, gotMethods []string
+	pb := reflect.TypeOf((*vmpb.VMServer)(nil)).Elem()
+	for i := 0; i < pb.NumMethod()-1; i++ {
+		wantMethods = append(wantMethods, pb.Method(i).Name)
+	}
+	sort.Strings(wantMethods)
+
+	impl := reflect.TypeOf(&VMServer{})
+	for i := 0; i < impl.NumMethod(); i++ {
+		gotMethods = append(gotMethods, impl.Method(i).Name)
+	}
+	sort.Strings(gotMethods)
+
+	if !reflect.DeepEqual(gotMethods, wantMethods) {
+		t.Errorf("\ngot: %q\nwant: %q", gotMethods, wantMethods)
+	}
+}
+
+// chainVMTestPlugin creates the server plugin needed for the test
+func chainVMTestPlugin(t *testing.T, _ bool) (plugin.Plugin, *gomock.Controller) {
+	// test key is "chainVMTest"
+	ctrl := gomock.NewController(t)
+
+	return NewTestVM(&TestSubnetVM{
+		logger: hclog.New(&hclog.LoggerOptions{
+			Level:      hclog.Trace,
+			Output:     os.Stderr,
+			JSONFormat: true,
+		}),
+	}), ctrl
+}
 
 // Test_VMCreateHandlers tests the Handle and HandleSimple RPCs by creating a plugin and
 // serving the handlers exposed by the subnet. The test then will exercise the service
@@ -46,7 +92,7 @@ func Test_VMCreateHandlers(t *testing.T) {
 		Params:  []string{},
 		ID:      "1",
 	}
-	pingBody, err := j.Marshal(pr)
+	pingBody, err := stdjson.Marshal(pr)
 	assert.NoError(err)
 
 	scenarios := []struct {
@@ -60,11 +106,11 @@ func Test_VMCreateHandlers(t *testing.T) {
 	}
 	for _, scenario := range scenarios {
 		t.Run(scenario.name, func(t *testing.T) {
-			process := helperProcess("vm")
+			process := helperProcess(chainVMTestKey)
 			c := plugin.NewClient(&plugin.ClientConfig{
 				Cmd:              process,
 				HandshakeConfig:  TestHandshake,
-				Plugins:          TestPluginMap,
+				Plugins:          TestClientPluginMap,
 				AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
 			})
 			defer c.Kill()
@@ -81,14 +127,12 @@ func Test_VMCreateHandlers(t *testing.T) {
 			assert.NoErrorf(err, "failed to get plugin client: %v", err)
 
 			// Grab the vm implementation.
-			raw, err := client.Dispense("vm")
+			raw, err := client.Dispense(chainVMTestKey)
 			assert.NoErrorf(err, "failed to dispense plugin: %v", err)
 
 			// Get vm client.
 			vm, ok := raw.(*TestVMClient)
-			if !ok {
-				assert.NoError(err)
-			}
+			assert.True(ok)
 
 			// Get the handlers exposed by the subnet vm.
 			handlers, err := vm.CreateHandlers()
@@ -146,7 +190,7 @@ func testHTTPPingRequest(target, endpoint string, payload []byte) error {
 		return err
 	}
 	var ping testResult
-	err = j.Unmarshal(pb, &ping)
+	err = stdjson.Unmarshal(pb, &ping)
 	if err != nil {
 		return err
 	}
@@ -191,60 +235,63 @@ type TestVM interface {
 	CreateHandlers() (map[string]*common.HTTPHandler, error)
 }
 
-func NewTestServer(vm TestVM, broker *plugin.GRPCBroker) *TestVMServer {
+func NewTestServer(vm TestVM) *TestVMServer {
 	return &TestVMServer{
-		vm:     vm,
-		broker: broker,
+		vm: vm,
 	}
 }
 
 type TestVMServer struct {
-	vmproto.UnimplementedVMServer
-	vm     TestVM
-	broker *plugin.GRPCBroker
+	vmpb.UnimplementedVMServer
+	vm TestVM
 
 	serverCloser grpcutils.ServerCloser
 }
 
-func (vm *TestVMServer) CreateHandlers(context.Context, *emptypb.Empty) (*vmproto.CreateHandlersResponse, error) {
+func (vm *TestVMServer) CreateHandlers(context.Context, *emptypb.Empty) (*vmpb.CreateHandlersResponse, error) {
 	handlers, err := vm.vm.CreateHandlers()
 	if err != nil {
 		return nil, err
 	}
 
-	resp := &vmproto.CreateHandlersResponse{}
+	resp := &vmpb.CreateHandlersResponse{}
 	for prefix, h := range handlers {
 		handler := h
 
-		serverID := vm.broker.NextId()
-		go vm.broker.AcceptAndServe(serverID, func(opts []grpc.ServerOption) *grpc.Server {
-			opts = append(opts, serverOptions...)
+		// start the http server
+		serverListener, err := grpcutils.NewListener()
+		if err != nil {
+			return nil, err
+		}
+		serverAddr := serverListener.Addr().String()
+
+		go grpcutils.Serve(serverListener, func(opts []grpc.ServerOption) *grpc.Server {
+			if len(opts) == 0 {
+				opts = append(opts, grpcutils.DefaultServerOptions...)
+			}
 			server := grpc.NewServer(opts...)
 			vm.serverCloser.Add(server)
-			ghttpproto.RegisterHTTPServer(server, ghttp.NewServer(handler.Handler, vm.broker))
+			httppb.RegisterHTTPServer(server, ghttp.NewServer(handler.Handler))
 			return server
 		})
 
-		resp.Handlers = append(resp.Handlers, &vmproto.Handler{
+		resp.Handlers = append(resp.Handlers, &vmpb.Handler{
 			Prefix:      prefix,
 			LockOptions: uint32(handler.LockOptions),
-			Server:      serverID,
+			ServerAddr:  serverAddr,
 		})
 	}
 	return resp, nil
 }
 
 type TestVMClient struct {
-	client vmproto.VMClient
-	broker *plugin.GRPCBroker
-
-	conns []*grpc.ClientConn
+	client vmpb.VMClient
+	conns  []*grpc.ClientConn
 }
 
-func NewTestClient(client vmproto.VMClient, broker *plugin.GRPCBroker) *TestVMClient {
+func NewTestClient(client vmpb.VMClient) *TestVMClient {
 	return &TestVMClient{
 		client: client,
-		broker: broker,
 	}
 }
 
@@ -256,18 +303,36 @@ func (vm *TestVMClient) CreateHandlers() (map[string]*common.HTTPHandler, error)
 
 	handlers := make(map[string]*common.HTTPHandler, len(resp.Handlers))
 	for _, handler := range resp.Handlers {
-		conn, err := vm.broker.Dial(handler.Server)
+		clientConn, err := grpcutils.Dial(handler.ServerAddr)
 		if err != nil {
 			return nil, err
 		}
 
-		vm.conns = append(vm.conns, conn)
+		vm.conns = append(vm.conns, clientConn)
 		handlers[handler.Prefix] = &common.HTTPHandler{
 			LockOptions: common.LockOption(handler.LockOptions),
-			Handler:     ghttp.NewClient(ghttpproto.NewHTTPClient(conn), vm.broker),
+			Handler:     ghttp.NewClient(httppb.NewHTTPClient(clientConn)),
 		}
 	}
 	return handlers, nil
+}
+
+type testVMPlugin struct {
+	plugin.NetRPCUnsupportedPlugin
+	vm TestVM
+}
+
+func NewTestVM(vm *TestSubnetVM) plugin.Plugin {
+	return &testVMPlugin{vm: vm}
+}
+
+func (p *testVMPlugin) GRPCServer(_ *plugin.GRPCBroker, s *grpc.Server) error {
+	vmpb.RegisterVMServer(s, NewTestServer(p.vm))
+	return nil
+}
+
+func (p *testVMPlugin) GRPCClient(_ context.Context, _ *plugin.GRPCBroker, c *grpc.ClientConn) (interface{}, error) {
+	return NewTestClient(vmpb.NewVMClient(c)), nil
 }
 
 type TestSubnetVM struct {
@@ -316,8 +381,8 @@ func (p *PingService) Ping(_ *http.Request, _ *struct{}, reply *PingReply) (err 
 
 func getTestRPCServer() (*gorillarpc.Server, error) {
 	server := gorillarpc.NewServer()
-	server.RegisterCodec(cjson.NewCodec(), "application/json")
-	server.RegisterCodec(cjson.NewCodec(), "application/json;charset=UTF-8")
+	server.RegisterCodec(json.NewCodec(), "application/json")
+	server.RegisterCodec(json.NewCodec(), "application/json;charset=UTF-8")
 	if err := server.RegisterService(&PingService{}, "subnet"); err != nil {
 		return nil, fmt.Errorf("failed to create rpc server %v", err)
 	}

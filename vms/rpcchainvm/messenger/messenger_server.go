@@ -7,19 +7,20 @@ import (
 	"context"
 	"errors"
 
-	"github.com/lasthyphen/beacongo/api/proto/messengerproto"
 	"github.com/lasthyphen/beacongo/snow/engine/common"
+
+	messengerpb "github.com/lasthyphen/beacongo/proto/pb/messenger"
 )
 
 var (
 	errFullQueue = errors.New("full message queue")
 
-	_ messengerproto.MessengerServer = &Server{}
+	_ messengerpb.MessengerServer = &Server{}
 )
 
 // Server is a messenger that is managed over RPC.
 type Server struct {
-	messengerproto.UnimplementedMessengerServer
+	messengerpb.UnsafeMessengerServer
 	messenger chan<- common.Message
 }
 
@@ -28,11 +29,11 @@ func NewServer(messenger chan<- common.Message) *Server {
 	return &Server{messenger: messenger}
 }
 
-func (s *Server) Notify(_ context.Context, req *messengerproto.NotifyRequest) (*messengerproto.NotifyResponse, error) {
+func (s *Server) Notify(_ context.Context, req *messengerpb.NotifyRequest) (*messengerpb.NotifyResponse, error) {
 	msg := common.Message(req.Message)
 	select {
 	case s.messenger <- msg:
-		return &messengerproto.NotifyResponse{}, nil
+		return &messengerpb.NotifyResponse{}, nil
 	default:
 		return nil, errFullQueue
 	}

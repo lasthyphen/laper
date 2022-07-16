@@ -28,13 +28,14 @@ import (
 	"github.com/lasthyphen/beacongo/snow/validators"
 	"github.com/lasthyphen/beacongo/utils"
 	"github.com/lasthyphen/beacongo/utils/constants"
-	"github.com/lasthyphen/beacongo/utils/crypto"
 	"github.com/lasthyphen/beacongo/utils/json"
 	"github.com/lasthyphen/beacongo/utils/logging"
 	"github.com/lasthyphen/beacongo/utils/timer/mockable"
+	"github.com/lasthyphen/beacongo/utils/window"
 	"github.com/lasthyphen/beacongo/utils/wrappers"
 	"github.com/lasthyphen/beacongo/version"
 	"github.com/lasthyphen/beacongo/vms/components/djtx"
+	"github.com/lasthyphen/beacongo/vms/platformvm/fx"
 	"github.com/lasthyphen/beacongo/vms/platformvm/reward"
 	"github.com/lasthyphen/beacongo/vms/secp256k1fx"
 
@@ -42,15 +43,17 @@ import (
 )
 
 const (
-	droppedTxCacheSize     = 64
-	validatorSetsCacheSize = 64
-
 	// MaxValidatorWeightFactor is the maximum factor of the validator stake
 	// that is allowed to be placed on a validator.
 	MaxValidatorWeightFactor uint64 = 5
 
+	validatorSetsCacheSize = 64
+
 	// Maximum future start time for staking/delegating
 	maxFutureStartTime = 24 * 7 * 2 * time.Hour
+
+	maxRecentlyAcceptedWindowSize = 256
+	recentlyAcceptedWindowTTL     = 5 * time.Minute
 )
 
 var (
@@ -63,7 +66,7 @@ var (
 	_ block.ChainVM        = &VM{}
 	_ validators.Connector = &VM{}
 	_ secp256k1fx.VM       = &VM{}
-	_ Fx                   = &secp256k1fx.Fx{}
+	_ validators.State     = &VM{}
 )
 
 type VM struct {
@@ -75,9 +78,6 @@ type VM struct {
 
 	// Used to get time. Useful for faking time during tests.
 	clock mockable.Clock
-
-	// Used to create and use keys.
-	factory crypto.FactorySECP256K1R
 
 	blockBuilder blockBuilder
 
@@ -97,19 +97,11 @@ type VM struct {
 	// ID of the last accepted block
 	lastAcceptedID ids.ID
 
-	fx            Fx
+	fx            fx.Fx
 	codecRegistry codec.Registry
 
 	// Bootstrapped remembers if this chain has finished bootstrapping or not
 	bootstrapped utils.AtomicBool
-
-	// Contains the IDs of transactions recently dropped because they failed
-	// verification. These txs may be re-issued and put into accepted blocks, so
-	// check the database to see if it was later committed/aborted before
-	// reporting that it's dropped.
-	// Key: Tx ID
-	// Value: String repr. of the verification error
-	droppedTxCache cache.LRU
 
 	// Maps caches for each subnet that is currently whitelisted.
 	// Key: Subnet ID
@@ -119,6 +111,9 @@ type VM struct {
 	// Key: block ID
 	// Value: the block
 	currentBlocks map[ids.ID]Block
+
+	// sliding window of blocks that were recently accepted
+	recentlyAccepted *window.Window
 }
 
 // Initialize this blockchain.
@@ -141,7 +136,7 @@ func (vm *VM) Initialize(
 	}
 
 	// Initialize metrics as soon as possible
-	if err := vm.metrics.Initialize("", registerer); err != nil {
+	if err := vm.metrics.Initialize("", registerer, vm.WhitelistedSubnets); err != nil {
 		return err
 	}
 
@@ -161,7 +156,6 @@ func (vm *VM) Initialize(
 		return err
 	}
 
-	vm.droppedTxCache = cache.LRU{Size: droppedTxCacheSize}
 	vm.validatorSetCaches = make(map[ids.ID]cache.Cacher)
 	vm.currentBlocks = make(map[ids.ID]Block)
 
@@ -199,8 +193,14 @@ func (vm *VM) Initialize(
 		)
 	}
 
+	vm.recentlyAccepted = window.New(
+		window.Config{
+			Clock:   &vm.clock,
+			MaxSize: maxRecentlyAcceptedWindowSize,
+			TTL:     recentlyAcceptedWindowTTL,
+		},
+	)
 	vm.lastAcceptedID = is.GetLastAccepted()
-
 	ctx.Log.Info("initializing last accepted block as %s", vm.lastAcceptedID)
 
 	// Build off the most recently accepted block
@@ -297,7 +297,7 @@ func (vm *VM) onNormalOperationsStarted() error {
 	}
 	primaryValidators := primaryValidatorSet.List()
 
-	validatorIDs := make([]ids.ShortID, len(primaryValidators))
+	validatorIDs := make([]ids.NodeID, len(primaryValidators))
 	for i, vdr := range primaryValidators {
 		validatorIDs[i] = vdr.ID()
 	}
@@ -334,7 +334,7 @@ func (vm *VM) Shutdown() error {
 		}
 		primaryValidators := primaryValidatorSet.List()
 
-		validatorIDs := make([]ids.ShortID, len(primaryValidators))
+		validatorIDs := make([]ids.NodeID, len(primaryValidators))
 		for i, vdr := range primaryValidators {
 			validatorIDs[i] = vdr.ID()
 		}
@@ -449,11 +449,11 @@ func (vm *VM) CreateStaticHandlers() (map[string]*common.HTTPHandler, error) {
 	}, nil
 }
 
-func (vm *VM) Connected(vdrID ids.ShortID, _ version.Application) error {
+func (vm *VM) Connected(vdrID ids.NodeID, _ version.Application) error {
 	return vm.uptimeManager.Connect(vdrID)
 }
 
-func (vm *VM) Disconnected(vdrID ids.ShortID) error {
+func (vm *VM) Disconnected(vdrID ids.NodeID) error {
 	if err := vm.uptimeManager.Disconnect(vdrID); err != nil {
 		return err
 	}
@@ -462,7 +462,7 @@ func (vm *VM) Disconnected(vdrID ids.ShortID) error {
 
 // GetValidatorSet returns the validator set at the specified height for the
 // provided subnetID.
-func (vm *VM) GetValidatorSet(height uint64, subnetID ids.ID) (map[ids.ShortID]uint64, error) {
+func (vm *VM) GetValidatorSet(height uint64, subnetID ids.ID) (map[ids.NodeID]uint64, error) {
 	validatorSetsCache, exists := vm.validatorSetCaches[subnetID]
 	if !exists {
 		validatorSetsCache = &cache.LRU{Size: validatorSetsCacheSize}
@@ -473,7 +473,7 @@ func (vm *VM) GetValidatorSet(height uint64, subnetID ids.ID) (map[ids.ShortID]u
 	}
 
 	if validatorSetIntf, ok := validatorSetsCache.Get(height); ok {
-		validatorSet, ok := validatorSetIntf.(map[ids.ShortID]uint64)
+		validatorSet, ok := validatorSetIntf.(map[ids.NodeID]uint64)
 		if !ok {
 			return nil, errWrongCacheType
 		}
@@ -498,7 +498,7 @@ func (vm *VM) GetValidatorSet(height uint64, subnetID ids.ID) (map[ids.ShortID]u
 	}
 	currentValidatorList := currentValidators.List()
 
-	vdrSet := make(map[ids.ShortID]uint64, len(currentValidatorList))
+	vdrSet := make(map[ids.NodeID]uint64, len(currentValidatorList))
 	for _, vdr := range currentValidatorList {
 		vdrSet[vdr.ID()] = vdr.Weight()
 	}
@@ -543,6 +543,33 @@ func (vm *VM) GetValidatorSet(height uint64, subnetID ids.ID) (map[ids.ShortID]u
 	return vdrSet, nil
 }
 
+// GetMinimumHeight returns the height of the most recent block beyond the
+// horizon of our recentlyAccepted window.
+//
+// Because the time between blocks is arbitrary, we're only guaranteed that
+// the window's configured TTL amount of time has passed once an element
+// expires from the window.
+//
+// To try to always return a block older than the window's TTL, we return the
+// parent of the oldest element in the window (as an expired element is always
+// guaranteed to be sufficiently stale). If we haven't expired an element yet
+// in the case of a process restart, we default to the lastAccepted block's
+// height which is likely (but not guaranteed) to also be older than the
+// window's configured TTL.
+func (vm *VM) GetMinimumHeight() (uint64, error) {
+	oldest, ok := vm.recentlyAccepted.Oldest()
+	if !ok {
+		return vm.GetCurrentHeight()
+	}
+
+	blk, err := vm.GetBlock(oldest.(ids.ID))
+	if err != nil {
+		return 0, err
+	}
+
+	return blk.Height() - 1, nil
+}
+
 // GetCurrentHeight returns the height of the last accepted block
 func (vm *VM) GetCurrentHeight() (uint64, error) {
 	lastAccepted, err := vm.getBlock(vm.lastAcceptedID)
@@ -584,21 +611,24 @@ func (vm *VM) Clock() *mockable.Clock { return &vm.clock }
 
 func (vm *VM) Logger() logging.Logger { return vm.ctx.Log }
 
-// Returns the percentage of the total stake on the Primary Network of nodes
-// connected to this node.
-func (vm *VM) getPercentConnected() (float64, error) {
-	vdrSet, exists := vm.Validators.GetValidators(constants.PrimaryNetworkID)
+// Returns the percentage of the total stake of the subnet connected to this
+// node.
+func (vm *VM) getPercentConnected(subnetID ids.ID) (float64, error) {
+	vdrSet, exists := vm.Validators.GetValidators(subnetID)
 	if !exists {
-		return 0, errNoPrimaryValidators
+		return 0, errNoValidators
 	}
 
-	vdrs := vdrSet.List()
+	vdrSetWeight := vdrSet.Weight()
+	if vdrSetWeight == 0 {
+		return 1, nil
+	}
 
 	var (
 		connectedStake uint64
 		err            error
 	)
-	for _, vdr := range vdrs {
+	for _, vdr := range vdrSet.List() {
 		if !vm.uptimeManager.IsConnected(vdr.ID()) {
 			continue // not connected to us --> don't include
 		}
@@ -607,5 +637,5 @@ func (vm *VM) getPercentConnected() (float64, error) {
 			return 0, err
 		}
 	}
-	return float64(connectedStake) / float64(vdrSet.Weight()), nil
+	return float64(connectedStake) / float64(vdrSetWeight), nil
 }

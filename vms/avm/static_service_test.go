@@ -8,6 +8,7 @@ import (
 
 	"github.com/lasthyphen/beacongo/utils/constants"
 	"github.com/lasthyphen/beacongo/utils/formatting"
+	"github.com/lasthyphen/beacongo/utils/formatting/address"
 	"github.com/lasthyphen/beacongo/utils/json"
 )
 
@@ -28,7 +29,7 @@ func TestBuildGenesis(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		addrMap[addrStr], err = formatting.FormatBech32(testHRP, b)
+		addrMap[addrStr], err = address.FormatBech32(testHRP, b)
 		if err != nil {
 			t.Fatal(err)
 		}

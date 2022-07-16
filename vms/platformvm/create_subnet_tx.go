@@ -12,6 +12,7 @@ import (
 	"github.com/lasthyphen/beacongo/snow"
 	"github.com/lasthyphen/beacongo/utils/crypto"
 	"github.com/lasthyphen/beacongo/vms/components/djtx"
+	"github.com/lasthyphen/beacongo/vms/platformvm/fx"
 	"github.com/lasthyphen/beacongo/vms/secp256k1fx"
 )
 
@@ -22,7 +23,7 @@ type UnsignedCreateSubnetTx struct {
 	// Metadata, inputs and outputs
 	BaseTx `serialize:"true"`
 	// Who is authorized to manage this subnet
-	Owner Owner `serialize:"true" json:"owner"`
+	Owner fx.Owner `serialize:"true" json:"owner"`
 }
 
 // InputUTXOs for [DecisionTxs] will return an empty set to diffrentiate from the [AtomicTxs] input UTXOs

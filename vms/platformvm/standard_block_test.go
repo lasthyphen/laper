@@ -7,6 +7,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/lasthyphen/beacongo/chains/atomic"
 	"github.com/lasthyphen/beacongo/database/prefixdb"
 	"github.com/lasthyphen/beacongo/ids"
@@ -15,7 +17,6 @@ import (
 	"github.com/lasthyphen/beacongo/vms/components/djtx"
 	"github.com/lasthyphen/beacongo/vms/platformvm/status"
 	"github.com/lasthyphen/beacongo/vms/secp256k1fx"
-	"github.com/stretchr/testify/assert"
 )
 
 func TestAtomicTxImports(t *testing.T) {

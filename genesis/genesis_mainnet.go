@@ -11,6 +11,7 @@ import (
 )
 
 var (
+
 	mainnetGenesisConfigJSON = `{
 		"networkID": 1,
 		"allocations": [

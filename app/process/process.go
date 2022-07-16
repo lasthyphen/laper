@@ -5,14 +5,9 @@ package process
 
 import (
 	"fmt"
-	"path/filepath"
 	"sync"
 
 	"github.com/lasthyphen/beacongo/app"
-	"github.com/lasthyphen/beacongo/database/leveldb"
-	"github.com/lasthyphen/beacongo/database/manager"
-	"github.com/lasthyphen/beacongo/database/memdb"
-	"github.com/lasthyphen/beacongo/database/rocksdb"
 	"github.com/lasthyphen/beacongo/nat"
 	"github.com/lasthyphen/beacongo/node"
 	"github.com/lasthyphen/beacongo/utils/constants"
@@ -20,7 +15,6 @@ import (
 	"github.com/lasthyphen/beacongo/utils/logging"
 	"github.com/lasthyphen/beacongo/utils/perms"
 	"github.com/lasthyphen/beacongo/utils/ulimit"
-	"github.com/lasthyphen/beacongo/version"
 )
 
 const (
@@ -56,7 +50,8 @@ func NewApp(config node.Config) app.App {
 }
 
 // Start the business logic of the node (as opposed to config reading, etc).
-// Does not block until the node is done.
+// Does not block until the node is done. Errors returned from this method
+// are not logged.
 func (p *process) Start() error {
 	// Set the data directory permissions to be read write.
 	if err := perms.ChmodR(p.config.DatabaseConfig.Path, true, perms.ReadWriteExecute); err != nil {
@@ -77,30 +72,7 @@ func (p *process) Start() error {
 	// update fd limit
 	fdLimit := p.config.FdLimit
 	if err := ulimit.Set(fdLimit, log); err != nil {
-		return err
-	}
-
-	// start the db manager
-	var dbManager manager.Manager
-	switch p.config.DatabaseConfig.Name {
-	case rocksdb.Name:
-		path := filepath.Join(p.config.DatabaseConfig.Path, rocksdb.Name)
-		dbManager, err = manager.NewRocksDB(path, p.config.DatabaseConfig.Config, log, version.CurrentDatabase)
-	case leveldb.Name:
-		dbManager, err = manager.NewLevelDB(p.config.DatabaseConfig.Path, p.config.DatabaseConfig.Config, log, version.CurrentDatabase)
-	case memdb.Name:
-		dbManager = manager.NewMemDB(version.CurrentDatabase)
-	default:
-		err = fmt.Errorf(
-			"db-type was %q but should have been one of {%s, %s, %s}",
-			p.config.DatabaseConfig.Name,
-			leveldb.Name,
-			rocksdb.Name,
-			memdb.Name,
-		)
-	}
-	if err != nil {
-		log.Fatal("couldn't create %q db manager at %s: %s", p.config.DatabaseConfig.Name, p.config.DatabaseConfig.Path, err)
+		log.Fatal("failed to set fd-limit: %s", err)
 		logFactory.Close()
 		return err
 	}
@@ -134,13 +106,13 @@ func (p *process) Start() error {
 	// Open staking port we want for NAT Traversal to have the external port
 	// (config.IP.Port) to connect to our internal listening port
 	// (config.InternalStakingPort) which should be the same in most cases.
-	if p.config.IP.IP().Port != 0 {
+	if p.config.IPPort.IPPort().Port != 0 {
 		mapper.Map(
 			"TCP",
-			p.config.IP.IP().Port,
-			p.config.IP.IP().Port,
+			p.config.IPPort.IPPort().Port,
+			p.config.IPPort.IPPort().Port,
 			stakingPortName,
-			&p.config.IP,
+			p.config.IPPort,
 			p.config.DynamicUpdateDuration,
 		)
 	}
@@ -164,16 +136,13 @@ func (p *process) Start() error {
 		p.config.DynamicPublicIPResolver,
 		p.config.DynamicUpdateDuration,
 		log,
-		&p.config.IP,
+		p.config.IPPort,
 	)
 
-	if err := p.node.Initialize(&p.config, dbManager, log, logFactory); err != nil {
+	if err := p.node.Initialize(&p.config, log, logFactory); err != nil {
 		log.Fatal("error initializing node: %s", err)
 		mapper.UnmapAllPorts()
 		externalIPUpdater.Stop()
-		if err := dbManager.Close(); err != nil {
-			log.Warn("failed to close the node's DB: %s", err)
-		}
 		log.Stop()
 		logFactory.Close()
 		return err
@@ -193,9 +162,6 @@ func (p *process) Start() error {
 		defer func() {
 			mapper.UnmapAllPorts()
 			externalIPUpdater.Stop()
-			if err := dbManager.Close(); err != nil {
-				log.Warn("failed to close the node's DB: %s", err)
-			}
 
 			// If [p.node.Dispatch()] panics, then we should log the panic and
 			// then re-raise the panic. This is why the above defer is broken

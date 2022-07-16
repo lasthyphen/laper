@@ -8,38 +8,34 @@ import (
 
 	"google.golang.org/grpc"
 
-	"github.com/hashicorp/go-plugin"
-
 	"github.com/lasthyphen/beacongo/api/keystore"
-	"github.com/lasthyphen/beacongo/api/proto/gkeystoreproto"
-	"github.com/lasthyphen/beacongo/api/proto/rpcdbproto"
 	"github.com/lasthyphen/beacongo/database"
 	"github.com/lasthyphen/beacongo/database/rpcdb"
-	"github.com/lasthyphen/beacongo/utils/math"
 	"github.com/lasthyphen/beacongo/vms/rpcchainvm/grpcutils"
+
+	keystorepb "github.com/lasthyphen/beacongo/proto/pb/keystore"
+	rpcdbpb "github.com/lasthyphen/beacongo/proto/pb/rpcdb"
 )
 
-var _ gkeystoreproto.KeystoreServer = &Server{}
+var _ keystorepb.KeystoreServer = &Server{}
 
 // Server is a snow.Keystore that is managed over RPC.
 type Server struct {
-	gkeystoreproto.UnimplementedKeystoreServer
-	ks     keystore.BlockchainKeystore
-	broker *plugin.GRPCBroker
+	keystorepb.UnsafeKeystoreServer
+	ks keystore.BlockchainKeystore
 }
 
 // NewServer returns a keystore connected to a remote keystore
-func NewServer(ks keystore.BlockchainKeystore, broker *plugin.GRPCBroker) *Server {
+func NewServer(ks keystore.BlockchainKeystore) *Server {
 	return &Server{
-		ks:     ks,
-		broker: broker,
+		ks: ks,
 	}
 }
 
 func (s *Server) GetDatabase(
 	_ context.Context,
-	req *gkeystoreproto.GetDatabaseRequest,
-) (*gkeystoreproto.GetDatabaseResponse, error) {
+	req *keystorepb.GetDatabaseRequest,
+) (*keystorepb.GetDatabaseResponse, error) {
 	db, err := s.ks.GetRawDatabase(req.Username, req.Password)
 	if err != nil {
 		return nil, err
@@ -48,19 +44,23 @@ func (s *Server) GetDatabase(
 	closer := dbCloser{Database: db}
 
 	// start the db server
-	dbBrokerID := s.broker.NextId()
-	go s.broker.AcceptAndServe(dbBrokerID, func(opts []grpc.ServerOption) *grpc.Server {
-		opts = append(opts,
-			grpc.MaxRecvMsgSize(math.MaxInt),
-			grpc.MaxSendMsgSize(math.MaxInt),
-		)
+	serverListener, err := grpcutils.NewListener()
+	if err != nil {
+		return nil, err
+	}
+	serverAddr := serverListener.Addr().String()
+
+	go grpcutils.Serve(serverListener, func(opts []grpc.ServerOption) *grpc.Server {
+		if len(opts) == 0 {
+			opts = append(opts, grpcutils.DefaultServerOptions...)
+		}
 		server := grpc.NewServer(opts...)
 		closer.closer.Add(server)
 		db := rpcdb.NewServer(&closer)
-		rpcdbproto.RegisterDatabaseServer(server, db)
+		rpcdbpb.RegisterDatabaseServer(server, db)
 		return server
 	})
-	return &gkeystoreproto.GetDatabaseResponse{DbServer: dbBrokerID}, nil
+	return &keystorepb.GetDatabaseResponse{ServerAddr: serverAddr}, nil
 }
 
 type dbCloser struct {

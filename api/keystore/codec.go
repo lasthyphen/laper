@@ -6,7 +6,6 @@ package keystore
 import (
 	"github.com/lasthyphen/beacongo/codec"
 	"github.com/lasthyphen/beacongo/codec/linearcodec"
-	"github.com/lasthyphen/beacongo/codec/reflectcodec"
 	"github.com/lasthyphen/beacongo/utils/units"
 )
 
@@ -20,7 +19,7 @@ const (
 var c codec.Manager
 
 func init() {
-	lc := linearcodec.New(reflectcodec.DefaultTagName, maxSliceLength)
+	lc := linearcodec.NewCustomMaxLength(maxSliceLength)
 	c = codec.NewManager(maxPackerSize)
 	if err := c.RegisterCodec(codecVersion, lc); err != nil {
 		panic(err)

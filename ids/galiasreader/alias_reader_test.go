@@ -4,18 +4,19 @@
 package galiasreader
 
 import (
+	"context"
 	"net"
 	"testing"
 
-	"golang.org/x/net/context"
+	"github.com/stretchr/testify/assert"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/test/bufconn"
 
-	"github.com/stretchr/testify/assert"
-
-	"github.com/lasthyphen/beacongo/api/proto/galiasreaderproto"
 	"github.com/lasthyphen/beacongo/ids"
+	"github.com/lasthyphen/beacongo/vms/rpcchainvm/grpcutils"
+
+	aliasreaderpb "github.com/lasthyphen/beacongo/proto/pb/aliasreader"
 )
 
 const (
@@ -24,16 +25,20 @@ const (
 
 func TestInterface(t *testing.T) {
 	assert := assert.New(t)
+
 	for _, test := range ids.AliasTests {
 		listener := bufconn.Listen(bufSize)
-		server := grpc.NewServer()
+		serverCloser := grpcutils.ServerCloser{}
 		w := ids.NewAliaser()
-		galiasreaderproto.RegisterAliasReaderServer(server, NewServer(w))
-		go func() {
-			if err := server.Serve(listener); err != nil {
-				t.Logf("Server exited with error: %v", err)
-			}
-		}()
+
+		serverFunc := func(opts []grpc.ServerOption) *grpc.Server {
+			server := grpc.NewServer(opts...)
+			aliasreaderpb.RegisterAliasReaderServer(server, NewServer(w))
+			serverCloser.Add(server)
+			return server
+		}
+
+		go grpcutils.Serve(listener, serverFunc)
 
 		dialer := grpc.WithContextDialer(
 			func(context.Context, string) (net.Conn, error) {
@@ -41,14 +46,15 @@ func TestInterface(t *testing.T) {
 			},
 		)
 
-		ctx := context.Background()
-		conn, err := grpc.DialContext(ctx, "", dialer, grpc.WithInsecure())
+		dopts := grpcutils.DefaultDialOptions
+		dopts = append(dopts, dialer)
+		conn, err := grpcutils.Dial("", dopts...)
 		assert.NoError(err)
 
-		r := NewClient(galiasreaderproto.NewAliasReaderClient(conn))
+		r := NewClient(aliasreaderpb.NewAliasReaderClient(conn))
 		test(assert, r, w)
 
-		server.Stop()
+		serverCloser.Stop()
 		_ = conn.Close()
 		_ = listener.Close()
 	}

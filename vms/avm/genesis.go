@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/lasthyphen/beacongo/utils"
+	"github.com/lasthyphen/beacongo/vms/avm/txs"
 )
 
 type Genesis struct {
@@ -25,6 +26,6 @@ func (g *Genesis) Sort() { sort.Sort(g) }
 func (g *Genesis) IsSortedAndUnique() bool { return utils.IsSortedAndUnique(g) }
 
 type GenesisAsset struct {
-	Alias         string `serialize:"true"`
-	CreateAssetTx `serialize:"true"`
+	Alias             string `serialize:"true"`
+	txs.CreateAssetTx `serialize:"true"`
 }

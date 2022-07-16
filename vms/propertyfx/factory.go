@@ -6,10 +6,13 @@ package propertyfx
 import (
 	"github.com/lasthyphen/beacongo/ids"
 	"github.com/lasthyphen/beacongo/snow"
+	"github.com/lasthyphen/beacongo/vms"
 )
 
-// ID that this Fx uses when labeled
 var (
+	_ vms.Factory = &Factory{}
+
+	// ID that this Fx uses when labeled
 	ID = ids.ID{'p', 'r', 'o', 'p', 'e', 'r', 't', 'y', 'f', 'x'}
 )
 
