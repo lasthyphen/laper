@@ -6,64 +6,47 @@ package genesis
 import (
 	"time"
 
-	"github.com/lasthyphen/beacongo/utils/crypto"
-	"github.com/lasthyphen/beacongo/utils/formatting"
 	"github.com/lasthyphen/beacongo/utils/units"
-	"github.com/lasthyphen/beacongo/utils/wrappers"
 	"github.com/lasthyphen/beacongo/vms/platformvm/reward"
 )
 
-// PrivateKey-vmRQiZeXEXYMyJhEiqdC2z5JhuDbxL8ix9UVvjgMu2Er1NepE => P-local1g65uqn6t77p656w64023nh8nd9updzmxyymev2
-// PrivateKey-ewoqjP7PxY4yr3iLTpLisriqt94hdyDFNgchSxGGztUrTXtNN => X-local18jma8ppw3nhx5r4ap8clazz0dps7rv5u00z96u
-// 56289e99c94b6912bfc12adc093c9b51124f0dc54ac7a766b2bc5ccf558d8027 => 0x8db97C7cEcE249c2b98bDC0226Cc4C2A57BF52FC
-
-const (
-	VMRQKeyStr          = "vmRQiZeXEXYMyJhEiqdC2z5JhuDbxL8ix9UVvjgMu2Er1NepE"
-	VMRQKeyFormattedStr = crypto.PrivateKeyPrefix + VMRQKeyStr
-
-	EWOQKeyStr          = "ewoqjP7PxY4yr3iLTpLisriqt94hdyDFNgchSxGGztUrTXtNN"
-	EWOQKeyFormattedStr = crypto.PrivateKeyPrefix + EWOQKeyStr
-)
-
 var (
-	VMRQKey *crypto.PrivateKeySECP256K1R
-	EWOQKey *crypto.PrivateKeySECP256K1R
 
 	localGenesisConfigJSON = `{
 		"networkID": 12345,
 		"allocations": [
 			{
-				"ethAddr": "0xb3d82b1367d362de99ab59a658165aff520cbd4d",
-				"djtxAddr": "X-local1g65uqn6t77p656w64023nh8nd9updzmxyymev2",
+				"ethAddr": "0xd86b355443158939c2f1b2A00961F8453b33E74E",
+				"djtxAddr": "X-dijets1v8wat5z4cxh7wh873d7n6d9m6mpnynr8sgl059",
 				"initialAmount": 0,
 				"unlockSchedule": [
 					{
-						"amount": 10000000000000000,
+						"amount": 13999990000000000,
 						"locktime": 1633824000
 					}
 				]
 			},
 			{
-				"ethAddr": "0xb3d82b1367d362de99ab59a658165aff520cbd4d",
-				"djtxAddr": "X-local18jma8ppw3nhx5r4ap8clazz0dps7rv5u00z96u",
-				"initialAmount": 300000000000000000,
+				"ethAddr": "0x1B00f59fff05F6591c13e32740377eAE72661061",
+				"djtxAddr": "X-dijets1uxkc262hvgsvstguvawwaanmsh8zvtcsd64l5e",
+				"initialAmount": 30000000000000000,
 				"unlockSchedule": [
 					{
 						"amount": 20000000000000000
 					},
 					{
-						"amount": 10000000000000000,
+						"amount": 17999990000000000,
 						"locktime": 1633824000
 					}
 				]
 			},
 			{
-				"ethAddr": "0xb3d82b1367d362de99ab59a658165aff520cbd4d",
-				"djtxAddr": "X-local1ur873jhz9qnaqv5qthk5sn3e8nj3e0kmggalnu",
-				"initialAmount": 10000000000000000,
+				"ethAddr": "0x80231567cD6E270c8360B80b97034Ec26dad83b8",
+				"djtxAddr": "X-dijets16yd4ams4xdp9c6ht9zfnp90225ukwmqnj964sw",
+				"initialAmount": 35000000000000000,
 				"unlockSchedule": [
 					{
-						"amount": 10000000000000000,
+						"amount": 4000000000000000,
 						"locktime": 1633824000
 					}
 				]
@@ -73,32 +56,32 @@ var (
 		"initialStakeDuration": 31536000,
 		"initialStakeDurationOffset": 5400,
 		"initialStakedFunds": [
-			"X-local1g65uqn6t77p656w64023nh8nd9updzmxyymev2"
+			"X-dijets1v8wat5z4cxh7wh873d7n6d9m6mpnynr8sgl059"
 		],
 		"initialStakers": [
 			{
 				"nodeID": "NodeID-7Xhw2mDxuDS44j42TCB6U5579esbSt3Lg",
-				"rewardAddress": "X-local18jma8ppw3nhx5r4ap8clazz0dps7rv5u00z96u",
+				"rewardAddress": "X-dijets1uxkc262hvgsvstguvawwaanmsh8zvtcsd64l5e",
 				"delegationFee": 1000000
 			},
 			{
 				"nodeID": "NodeID-MFrZFVCXPv5iCn6M9K6XduxGTYp891xXZ",
-				"rewardAddress": "X-local18jma8ppw3nhx5r4ap8clazz0dps7rv5u00z96u",
+				"rewardAddress": "X-dijets1uxkc262hvgsvstguvawwaanmsh8zvtcsd64l5e",
 				"delegationFee": 500000
 			},
 			{
 				"nodeID": "NodeID-NFBbbJ4qCmNaCzeW7sxErhvWqvEQMnYcN",
-				"rewardAddress": "X-local18jma8ppw3nhx5r4ap8clazz0dps7rv5u00z96u",
+				"rewardAddress": "X-dijets1uxkc262hvgsvstguvawwaanmsh8zvtcsd64l5e",
 				"delegationFee": 250000
 			},
 			{
 				"nodeID": "NodeID-GWPcbFJZFfZreETSoWjPimr846mXEKCtu",
-				"rewardAddress": "X-local18jma8ppw3nhx5r4ap8clazz0dps7rv5u00z96u",
+				"rewardAddress": "X-dijets1uxkc262hvgsvstguvawwaanmsh8zvtcsd64l5e",
 				"delegationFee": 125000
 			},
 			{
 				"nodeID": "NodeID-P7oB2McjBGgW2NXXWVYjV8JEDFoW9xDE5",
-				"rewardAddress": "X-local18jma8ppw3nhx5r4ap8clazz0dps7rv5u00z96u",
+				"rewardAddress": "X-dijets1uxkc262hvgsvstguvawwaanmsh8zvtcsd64l5e",
 				"delegationFee": 62500
 			}
 		],
@@ -131,24 +114,3 @@ var (
 		},
 	}
 )
-
-func init() {
-	errs := wrappers.Errs{}
-	vmrqBytes, err := formatting.Decode(formatting.CB58, VMRQKeyStr)
-	errs.Add(err)
-	ewoqBytes, err := formatting.Decode(formatting.CB58, EWOQKeyStr)
-	errs.Add(err)
-
-	factory := crypto.FactorySECP256K1R{}
-	vmrqIntf, err := factory.ToPrivateKey(vmrqBytes)
-	errs.Add(err)
-	ewoqIntf, err := factory.ToPrivateKey(ewoqBytes)
-	errs.Add(err)
-
-	if errs.Err != nil {
-		panic(errs.Err)
-	}
-
-	VMRQKey = vmrqIntf.(*crypto.PrivateKeySECP256K1R)
-	EWOQKey = ewoqIntf.(*crypto.PrivateKeySECP256K1R)
-}
